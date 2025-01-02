@@ -12,4 +12,3 @@ Source File For Pulling the Data: [Code for data download](code/BeaPull.ipynb)
 ### GDP Price Deflator
 
 Source: BEA
-Source File For Pulling the
