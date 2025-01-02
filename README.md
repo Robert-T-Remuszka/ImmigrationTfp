@@ -7,8 +7,10 @@ All the data used in the analysis is provided on my website. The raw files, howe
 
 Source: Bureau of Economic Analysis (BEA)
 
-Source File For Pulling the Data: [Code for data download](code/BeaPull.ipynb)
+Source file for pulling the data: [File link](code/BeaPull.ipynb)
 
 ### GDP Price Deflator
 
 Source: BEA
+
+Source file for pulling the data: [File link](code/FredPull.ipynb)
