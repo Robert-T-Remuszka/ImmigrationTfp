@@ -3,6 +3,7 @@ data/
 lit/
 notes/
 output/
+code/__pycache__
 
 # Files
 CBO-vs-Census-NIM-Estimates.png
