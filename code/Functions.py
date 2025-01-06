@@ -15,9 +15,11 @@ def IpumsTidy(df):
                 serial = lambda x: x['serial'].astype(str),
                 pernum = lambda x: x['pernum'].astype(str),
                 statefip = lambda x: x['statefip'].astype(str),
-                countyfip = lambda x: x['countyfip'].astype(str))
+                countyfip = lambda x: x['countyfip'].astype(str),
+                met2013 = lambda x : x['met2013'].astype(str))
         .assign(statefip = lambda x: x['statefip'].str.zfill(2), # Pillow with zeros
-                countyfip = lambda x: x['countyfip'].str.zfill(3))
+                countyfip = lambda x: x['countyfip'].str.zfill(3),
+                met2013 = lambda x: x['met2013'].str.zfill(5))
         .assign(year = lambda x: pd.to_datetime(x['year'], 
                         format = '%Y', errors='coerce'))
         .assign(fipcode = lambda x: x['statefip'] + x['countyfip'])
@@ -29,8 +31,8 @@ def IpumsTidy(df):
     )
     
     # Reorder columns: the combination of sample, serial and pernum uniquely identifies individuals in Ipums
-    Tidy = Tidy.reindex(columns = ['sample', 'serial', 'pernum', 'fipcode'] + 
-            [col for col in Tidy.columns if col not in ['sample', 'serial', 'pernum', 'fipcode']])
+    Tidy = Tidy.reindex(columns = ['sample', 'serial', 'pernum', 'fipcode','met2013'] + 
+            [col for col in Tidy.columns if col not in ['sample', 'serial', 'pernum', 'fipcode','met2013']])
                         
     return Tidy
 
@@ -45,7 +47,8 @@ def WeightedSum(df,gvars):
         df.groupby(gvars)
         .apply(lambda x: pd.Series({
         'HoursSupplied': np.dot(x['uhrswork'],x['perwt']),
-        'BodiesSupplied': np.dot(x['ones'],x['perwt'])
+        'BodiesSupplied': np.dot(x['ones'],x['perwt']),
+        'met2013': x['met2013'].iloc[0]
         }))
         .reset_index()
         .assign(ForeignVar = gvars[0][-2:],       # Variable definition categories
