@@ -13,8 +13,8 @@ The data come from several sources. In order to download the data and replicate 
 The method used for this is described in the slides. The code that implements that method can be found in
 [EstimateTfp.do](code/EstimateTfp.do)
 
-**Note:** [EstimateTfp.do](code/EstimateTfp.do) requires the use to install "xframeappend". If you have not
-done so already then you should install this library using
+**Note:** [EstimateTfp.do](code/EstimateTfp.do) requires the command "xframeappend". If you have not
+done so already then you should install this from ssc using
 ```Stata
 ssc install xframeappend
 ```
