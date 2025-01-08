@@ -89,7 +89,6 @@ foreach year of numlist 2005(1)2023 {
 }
 
 frame TfpEstimates {
-    use "$Data/TfpByState.dta", clear
     la def State ///
         1 "AK" ///
         2 "AL" ///
