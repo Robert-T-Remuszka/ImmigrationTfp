@@ -35,18 +35,15 @@ frame StateDb{
 }
 
 * Read in Tfp Data
-use "$Data/TfpByState.dta", clear
+use "$Data/CountyDataTfpEstimates.dta", clear
 
 * Time averages by state
 frame copy default TimeAvg
 frame TimeAvg {
-    egen NmObs = total(!mi(Z)), by(StateAbb) // Counts nonmissing observations
-    gen SampFlag = NmObs >= 17 & !mi(NmObs)  // Connecticut is the only state with 17
-    drop NmObs
-    sort StateAbb year
-    
-    collapse (mean) Z, by(StateAbb)
 
+    sort StateAbb year
+    collapse (mean) Z, by(StateAbb)
+    
     frlink 1:1 StateAbb, frame(StateDb)
     frget *, from(StateDb)
     ren ID _ID
@@ -55,7 +52,5 @@ frame TimeAvg {
     spmap Z using "$Data/ShpCorr", id(_ID) ///
     fcolor(Blues)    ///
     legstyle(2) legend(pos(7) size(2.8))   ///
-    ocolor(black%30) osize(0.05 ..) 
+    ocolor(black%30) osize(0.05 ..) clnum(9)
 }
-
-frame change TimeAvg
