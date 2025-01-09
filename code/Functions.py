@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 
-Paths = {'data':'../data', 'cps':'../data/cps'}
+Paths = {'data':'../data', 
+         'cps':'../data/cps',
+         'acs':'../data/acs'}
 
 def IpumsTidy(df):
     
