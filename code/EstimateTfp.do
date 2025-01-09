@@ -6,8 +6,10 @@ REQUIRED PACKAGES: You will need to have xframappend installed to run this code.
 set mem 10g
 clear all
 do Globals.do
+do Functions.do
 
 use "$Data/CountyData.dta", clear
+
 loc SampleDef01 "ForeignVar == 2 & HoursVar == 2" // Foreigners exclude naturalized citizens, Full time if >= 35 hrs last week
 loc SampleDef02 "ForeignVar == 1 & HoursVar == 2" // Foreigners include naturalized citizens, Full time if >= 35 hrs last week
 loc SampleDef03 "ForeignVar == 1 & HoursVar == 1" // Foreigners include naturalized citizens, Full time if >= 40 hrs last week
@@ -40,7 +42,7 @@ foreach var in BodiesSupplied HoursSupplied {
     qui levelsof foreign
     foreach lvl in `r(levels)' {
         egen `var'`lvl'Fill = mean(`var'`lvl'), by(fipcode year HoursVar ForeignVar)
-        replace `var'`lvl' = `var'`lvl'Fill
+        replace `var'`lvl' = `var'`lvl'Fill / 1000 // GDP is in thousands of dollars
         drop `var'`lvl'Fill
     }
 }
@@ -50,103 +52,38 @@ bysort fipcode year HoursVar ForeignVar (foreign): drop if [_n==2] // These are 
 /**********
 Estimation
 ***********/
-* Create fixed effects local for estimation
-qui tab State, gen(I)
-loc FEs ""
-foreach s of numlist 1/`r(r)' {
-    loc FEs "`FEs' I`s'"
-}
 
-* Initialize data frame for estimates
-frame create TfpEstimates
-frame TfpEstimates {
-    gen State = .
-    gen year = .
-    gen Z = .
-}
+* Save the number of distinct counties
+encode fipcode, gen(fipcodenum)
+qui tab fipcodenum
+loc NCounties = `r(r)' - 1 // Leaving one out to avoid collinearity
 
-foreach year of numlist 2005(1)2023 {
-    
-    * Estimate TFP by Nonlinear Least Squares
-    nl (logY = {fe: `FEs'} + {beta} * log( ///
-    {lambda}^(1 - 1/{beta})*({alphaF}*BodiesSupplied1)^(1/{beta}) + (1-{lambda})^(1-1/{beta})*({alphaD}*BodiesSupplied0)^(1/{beta}) ///
-    )) if year == `year' & `SampleDef01', initial(beta 1 alphaF 1 alphaD 1 lambda 0.5) nocons eps(1e-5) iter(1000)
+* Save the number of years
+qui tab year
+qui tab year
+loc NYears = `r(r)' - 1 // Leaving one out to avoid colllinearity
 
-    foreach state of numlist 1/50 {
-        
-        frame create AppendThis
-        frame AppendThis { // Store the estimates
-            insobs 1
-            gen State = `state'
-            gen year = `year'
-            gen Z = exp(_b[/fe_I`state'])
-            replace Z = . if Z == 1
-        }
+* Initialize and run
+matrix InitVals = [1, 0.5, 1, 1, 0, J(1,`NYears',1), J(1,`NCounties', 1)]
+loc k = colsof(InitVals)
+nl CesFe @ logY BodiesSupplied1 BodiesSupplied0 if `SampleDef01', initial(InitVals) eps(1e-5) iter(1000) nparam(`k') ///
+variables(BodiesSupplied0 BodiesSupplied1) hasconstant(b5)
 
-        frame TfpEstimates: xframeappend AppendThis, drop
+* Calculate TFP and Save Data
+frame copy default TfpEstimates, replace
+frame TfpEstimates { // Save a new dataset with these estimates
+
+    keep if `SampleDef01'
+
+    predict double resid if `SampleDef01', res
+    gen Z = exp(res + _b[/b5]) if fipcodenum == 1
+    forvalues fip = 2/508 { // There are 508 fipcode nums but only 507 fe coeffecients
+        loc feindex = 5 + 18 + `fip' - 1 // 5 CES params +  18 year fes and - 1 because fipcodenum==1 is left out of the estimation
+        replace Z = exp(res + _b[/b`feindex'] + _b[/b5]) if fipcodenum == `fip'
     }
-    
-}
 
-frame TfpEstimates {
-    la def State ///
-        1 "AK" ///
-        2 "AL" ///
-        3 "AR" ///
-        4 "AZ" ///
-        5 "CA" ///
-        6 "CO" ///
-        7 "CT" ///
-        8 "DC" ///
-        9 "DE" /// 
-        10 "FL" ///
-        11 "GA" ///
-        12 "HI" ///
-        13 "IA" ///
-        14 "ID" ///
-        15 "IL" ///
-        16 "IN" ///
-        17 "KS" ///
-        18 "KY" ///
-        19 "LA" ///
-        20 "MA" ///
-        21 "MD" ///
-        22 "ME" ///
-        23 "MI" ///
-        24 "MN" ///
-        25 "MO" ///
-        26 "MS" ///
-        27 "MT" ///
-        28 "NC" ///
-        29 "ND" ///
-        30 "NE" ///
-        31 "NH" ///
-        32 "NJ" ///
-        33 "NM" ///
-        34 "NV" ///
-        35 "NY" /// 
-        36 "OH" ///
-        37 "OK" ///
-        38 "OR" ///
-        39 "PA" ///
-        40 "RI" ///
-        41 "SC" ///
-        42 "TN" ///
-        43 "TX" ///
-        44 "UT" ///
-        45 "VA" ///
-        46 "VT" ///
-        47 "WA" ///
-        48 "WI" ///
-        49 "WV" ///
-        50 "WY"
+    keep fipcode year CountyName YNom HoursSupplied0 HoursSupplied1 BodiesSupplied0 ///
+    BodiesSupplied1 met2013 P Y StateAbb Z
+    save "$Data/CountyDataTfpEstimates.dta", replace
 
-    la values State State
-    decode State, gen(StateAbb)
-    drop State
-    order StateAbb year
-    sort StateAbb year
-
-    save "$Data/TfpByState.dta", replace
-    
 }
