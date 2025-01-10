@@ -6,51 +6,62 @@ REQUIRED PACKAGES: You will need to have shp2dta, geo2xy installed to run this c
 set mem 10g
 clear all
 do Globals.do
+loc graphs "TfpEstimates2019"
 
 * Generate dta file from US State Shapefile (2013 Tiger Line file from Census)
-shp2dta using "$Data/tl_2013_us_state/tl_2013_us_state.shp", ///
+shp2dta using "$Data/cb_2023_us_state_500k/cb_2023_us_state_500k.shp", ///
 data("$Data/ShpDataBase") coor("$Data/ShpCorr") replace
 
 * Resizing and repositioning Alaska and Hawaii
 use "$Data/ShpCorr.dta", clear
 
 * Move Hawaii
-drop if _X < -165 & _X != . &  _ID == 32
-replace _X = _X  + 55  if  _X != .  &  _ID == 32
-replace _Y = _Y  + 4  if _Y != .  &  _ID == 32
+drop if _X < -165 & _X != . &  _ID == 19
+replace _X = _X  + 55  if  _X != .  &  _ID == 39
+replace _Y = _Y  + 4  if _Y != .  &  _ID == 39
 
 * Resize Alaska - and drop some Aleutian Islands
-replace _X = _X*.4  -55 if  _X !=  . &  _ID == 41
-replace _Y = _Y*.4  + 1 if _Y != .  & _ID == 41
-drop if _X > -10 & _X != . & _ID == 41
+replace _X = _X*.4  -55 if  _X !=  . &  _ID == 19
+replace _Y = _Y*.4  + 1 if _Y != .  & _ID == 19
+drop if _X > -10 & _X != . & _ID == 19
 
 save "$Data/ShpCorr.dta", replace
 
 * Read in the database file
 frame create StateDb
-frame StateDb{ 
+frame StateDb { 
     use "$Data/ShpDataBase.dta", clear
     ren STUSPS StateAbb
     ren _ID ID                            // For some reason frget won't retrieve this _ in it
 }
 
 * Read in Tfp Data
-use "$Data/CountyDataTfpEstimates.dta", clear
+use "$Data/StateAnalysisFileTfp.dta", clear
 
 * Time averages by state
-frame copy default TimeAvg
-frame TimeAvg {
+frame copy default Collapse
+frame Collapse {
 
     sort StateAbb year
-    collapse (mean) Z, by(StateAbb)
+    collapse Z if year == 2019, by(StateAbb)
     
     frlink 1:1 StateAbb, frame(StateDb)
     frget *, from(StateDb)
     ren ID _ID
 
+    egen z = std(Z)
+    
     * Make map
-    spmap Z using "$Data/ShpCorr", id(_ID) ///
+    format z %12.2f
+
+    spmap z using "$Data/ShpCorr", id(_ID) ///
     fcolor(Blues)    ///
     legstyle(2) legend(pos(7) size(2.8))   ///
-    ocolor(black%30) osize(0.05 ..) clnum(9)
+    ocolor(black%30) osize(0.05 ..) cln(9) legend(pos(4) title("Standardized Values", size(small))) ///
+    name(TfpEstimates2019) 
+}
+
+* Export graphs
+foreach g in `graphs' {
+    graph export "$Graphs/`g'.pdf", replace name(`g')
 }

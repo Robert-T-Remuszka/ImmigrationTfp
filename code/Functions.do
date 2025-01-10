@@ -23,19 +23,20 @@ program nlCesFe
     (1-`lambda')^(1 - `beta') * (`alphaD' * `D')^(`beta')) `if'
 
     * Add in the year fixed effects
-    loc TfePos = 6            // There are the four CES parameters -> position 5 is where TFEs start
-    forvalues y = 2006/2023 { // Calculate the time fixed effects 
+    loc TfePos = $M + 1            // There are the 5 params (M=5) in the above CES part -> position 6 is where FEs start
+    loc StartYear = $FirstYear + 1
+    forvalues y = `StartYear'/$LastYear { // Calculate the time fixed effects 
 
         replace `lhs' = `lhs' + `at'[1,`TfePos']*(year == `y') `if'
         loc TfePos = `TfePos' + 1
     }
     
-    * Add in the County fixed effects
-    loc CfePos = 6 + 18   // We have 19 years in the data (2005-2023), but leave one out to avoid collinearity
-    forvalues c = 2/508 { // Calculate county fixed effects
+    * Add in the State fixed effects
+    loc SfePos = ($M + 1) + ($LastYear - $FirstYear) 
+    forvalues c = 2/$NRegions { // Calculate county fixed effects
         replace `lhs' = `lhs' + ///
-        `at'[1,`CfePos'] * (fipcodenum == `c') `if'
-        local CfePos = `CfePos' + 1
+        `at'[1,`SfePos'] * (state == `c') `if'
+        local SfePos = `SfePos' + 1
     }
     
 end
