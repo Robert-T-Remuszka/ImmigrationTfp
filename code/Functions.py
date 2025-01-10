@@ -3,7 +3,8 @@ import numpy as np
 
 Paths = {'data':'../data', 
          'cps':'../data/cps',
-         'acs':'../data/acs'}
+         'acs':'../data/acs',
+         'gdp':'../data/gdp_by_state'}
 
 def IpumsTidy(df):
     
