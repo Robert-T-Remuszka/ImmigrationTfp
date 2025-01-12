@@ -5,7 +5,7 @@ program nlCesFe
     value of beta, lambda, alphaF, alphaD...in that order.
     */
     version 18
-    syntax varlist(min=3 max=3) if, at(name)
+    syntax varlist if, at(name)
     local lhs: word 1 of `varlist'
     local F: word 2 of `varlist'
     local D: word 3 of `varlist'
