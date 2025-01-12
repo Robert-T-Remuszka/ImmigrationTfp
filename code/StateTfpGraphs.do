@@ -6,7 +6,7 @@ REQUIRED PACKAGES: You will need to have shp2dta, geo2xy installed to run this c
 set mem 10g
 clear all
 do Globals.do
-loc graphs "TfpEstimates2019"
+loc graphs "TfpEstimates2019 TfpGrowth94to23"
 
 * Generate dta file from US State Shapefile (2013 Tiger Line file from Census)
 shp2dta using "$Data/cb_2023_us_state_500k/cb_2023_us_state_500k.shp", ///
@@ -38,7 +38,7 @@ frame StateDb {
 * Read in Tfp Data
 use "$Data/StateAnalysisFileTfp.dta", clear
 
-* Time averages by state
+* Levels by state
 frame copy default Collapse
 frame Collapse {
 
@@ -59,6 +59,25 @@ frame Collapse {
     legstyle(2) legend(pos(7) size(2.8))   ///
     ocolor(black%30) osize(0.05 ..) cln(9) legend(pos(4) title("Standardized Values", size(small))) ///
     name(TfpEstimates2019) 
+}
+
+* Growth rates by state
+frame copy default Collapse, replace
+frame Collapse {
+    
+    sort StateAbb year
+    bysort StateAbb (year): gen gz = log(Z[_N]/Z[1]) * 100
+    collapse (firstnm) gz, by(StateAbb)
+
+    frlink 1:1 StateAbb, frame(StateDb)
+    frget *, from(StateDb)
+    ren ID _ID
+
+    * Make map
+    format gz %12.1f
+    spmap gz using "$Data/ShpCorr", id(_ID) ///
+    fcolor(Blues) legstyle(2) legend(pos(7) size(2.8)) ocolor(black%30) osize(0.05 ..) cln(9) ///
+    legen(pos(4)) name(TfpGrowth94to23)
 }
 
 * Export graphs
