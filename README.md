@@ -12,7 +12,7 @@ The data come from several sources. In order to download the data and replicate 
     * [Notebook File](code/BeaPull.ipynb)
     * API Key Needed: Yes
 4. GDP by State
-    * Manual download from [REAP](https://united-states.reaproject.org/)
+    * Manual download from BEA's [zip file archive](https://apps.bea.gov/regional/downloadzip.htm)
 5. Intercensal population estimates by state. Manual download from:
     1. [1990 - 1999](https://www.census.gov/data/datasets/time-series/demo/popest/intercensal-1990-2000-state-and-county-characteristics.html)
     2. [2000-2010](https://www.census.gov/data/datasets/time-series/demo/popest/intercensal-2000-2010-state.html)
