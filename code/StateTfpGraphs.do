@@ -31,7 +31,7 @@ save "$Data/ShpCorr.dta", replace
 frame create StateDb
 frame StateDb { 
     use "$Data/ShpDataBase.dta", clear
-    ren STUSPS StateAbb
+    ren NAME StateName
     ren _ID ID                            // For some reason frget won't retrieve this _ in it
 }
 
@@ -42,13 +42,13 @@ use "$Data/StateAnalysisFileTfp.dta", clear
 frame copy default Collapse
 frame Collapse {
 
-    sort StateAbb year
-    collapse Z if year == 2019, by(StateAbb)
+    sort StateName year
+    collapse Z if year == 2018, by(StateName)
     
-    frlink 1:1 StateAbb, frame(StateDb)
+    frlink 1:1 StateName, frame(StateDb)
     frget *, from(StateDb)
     ren ID _ID
-
+    
     egen z = std(Z)
     
     * Make map
@@ -65,11 +65,11 @@ frame Collapse {
 frame copy default Collapse, replace
 frame Collapse {
     
-    sort StateAbb year
-    bysort StateAbb (year): gen gz = log(Z[_N]/Z[1]) * 100
-    collapse (firstnm) gz, by(StateAbb)
+    sort StateName year
+    bysort StateName (year): gen gz = log(Z[_N]/Z[1]) * 100
+    collapse (firstnm) gz, by(StateName)
 
-    frlink 1:1 StateAbb, frame(StateDb)
+    frlink 1:1 StateName, frame(StateDb)
     frget *, from(StateDb)
     ren ID _ID
 
