@@ -9,17 +9,20 @@ program nlCesFe
     local lhs: word 1 of `varlist'
     local F: word 2 of `varlist'
     local D: word 3 of `varlist'
+    local K: word 4 of `varlist'
 
-    tempname beta lambda alphaF alphaD delta
+    tempname beta lambda alphaF alphaD alpha delta
     scalar `beta' = `at'[1,1]
     scalar `lambda' = `at'[1,2]
     scalar `alphaF' = `at'[1,3]
     scalar `alphaD' = `at'[1,4]
-    scalar `delta' = `at'[1,5]
+    scalar `alpha' = `at'[1,5]
+    scalar `delta' = `at'[1,6]
 
     * Compute the CES part
-    replace `lhs' = `delta' + (1/`beta') * log( ///
-    `lambda'^(1-`beta') * (`alphaF'*`F')^(`beta') + ///
+    replace `lhs' = `delta' + `alpha' * log(`K') + ///
+    (1-`alpha')/`beta' * log( ///
+    `lambda'^(1-`beta') * (`alphaF' * `F')^(`beta') + ///
     (1-`lambda')^(1 - `beta') * (`alphaD' * `D')^(`beta')) `if'
 
     * Add in the year fixed effects
