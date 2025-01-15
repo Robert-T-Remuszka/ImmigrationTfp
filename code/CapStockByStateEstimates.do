@@ -97,17 +97,18 @@ frame Gdp97to23 {
     drop len third unit tablename description linecode region
     order statefip
     ren geoname StateName
+    tostring v31, force replace // for some reason this get read in just fine...
     loc year = 1997
     forvalues i = 9/35 {
         destring v`i', gen(Va_`year') force
-        drop v`i'
+        //drop v`i'
         loc year = `year' + 1
     }
+    
     reshape long Va_, i(statefip StateName industryclassification) j(year)
     ren Va_ Va
     ren industryclassification Naics
 }
-
 /********************************************************************************
 NAICS-SIC Crosswalks from
 From ICPSR, Schaller, Zachary, and DeCelles, Paul
