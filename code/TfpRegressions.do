@@ -1,7 +1,7 @@
 clear all
 set mem 10g
 do Globals
-loc graphs "OlsOutput OlsTfp OlsCapital"
+loc graphs "OlsOutput OlsTfp OlsCapital IvOlsTfp"
 
 use "$Data/StateAnalysisFileTfp.dta", clear
 
@@ -94,8 +94,14 @@ gen settlement = Africa_1960_share * growth_1 + CaAuNz_1960_share * growth_2 + C
 + India_1960_share * growth_4 + LA_1960_share * growth_5 + Mexico_1960_share * growth_6 + Other_1960_share * growth_7 ///
 + AsiaOther_1960_share * growth_8 + EastEu_1960_share * growth_9 + WestEu_1960_share * growth_10
 
-gen lagshare = l.share_1 * growth_1 + l.share_2 * growth_2 + l.share_3 * growth_3 + l.share_4 * growth_4 + l.share_5 * growth_5 + ///
+gen PredictedFlow = share_1 * growth_1 + share_2 * growth_2 + share_3 * growth_3 + share_4 * growth_4 + share_5 * growth_5 + ///
+share_6 * growth_6 + share_7 * growth_7 + share_8 * growth_8 + share_9 * growth_9 + share_10 * growth_10
+
+gen PredictedFlowl1 = l.share_1 * growth_1 + l.share_2 * growth_2 + l.share_3 * growth_3 + l.share_4 * growth_4 + l.share_5 * growth_5 + ///
 l.share_6 * growth_6 + l.share_7 * growth_7 + l.share_8 * growth_8 + l.share_9 * growth_9 + l.share_10 * growth_10
+
+gen PredictedFlowl2 = l2.share_1 * growth_1 + l2.share_2 * growth_2 + l2.share_3 * growth_3 + l2.share_4 * growth_4 + l2.share_5 * growth_5 + ///
+l2.share_6 * growth_6 + l2.share_7 * growth_7 + l2.share_8 * growth_8 + l2.share_9 * growth_9 + l2.share_10 * growth_10
 /****************************************************************************************
 OLS
 ****************************************************************************************/
@@ -136,7 +142,7 @@ forvalues h = -2/10 {
         replace rhoK = _b[f] if _n == _N
         replace seK = _se[f] if _n == _N
     }
-    cap qui ivregress 2sls z`horizon' (f = lagshare) i.year i.State [pw=wt], vce(robust)
+    cap ivregress 2sls z`horizon' (f = PredictedFlowl1) i.year i.State [pw=wt], vce(robust)
     if _rc != 0 {
         frame Estimates {
             replace rhoIv = 0 if _n == _N
@@ -169,20 +175,27 @@ frame Estimates {
     gen bottomIv = -1.645 * seIv + rhoIv
 
     tw line rho h, lc(ebblue) || rarea top bottom h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
-    legend(label(2 "90% CI") order(2) pos(2) ring(0)) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
-    name(OlsTfp)
+    legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
+    name(OlsTfp) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
 
     tw line rhoY h, lc(ebblue) || rarea topY bottomY h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
-    legend(label(2 "90% CI") order(2) pos(2) ring(0)) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
-    name(OlsOutput)
+    legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
+    name(OlsOutput) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
 
     tw line rhoK h, lc(ebblue) || rarea topK bottomK h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
-    legend(label(2 "90% CI") order(2) pos(2) ring(0)) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
-    name(OlsCapital)
+    legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
+    name(OlsCapital) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
 
     tw line rhoIv h, lc(ebblue) || rarea topIv bottomIv h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
-    legend(label(2 "90% CI") order(2) pos(2) ring(0)) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
-    name(IvTfp)
+    legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
+    name(IvTfp) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
+
+    * Overlay the OLS and Iv estimates for Tfp
+    tw line rho h, lc(ebblue) || line rhoIv h, lc(orange) || rarea top bottom h, fcolor(ebblue%30) lwidth(none) ///
+    || rarea topIv bottomIv h, fcolor(orange%30) lwidth(none) ///
+    legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(-2(1)5,nogrid labsize(small)) ///
+    yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}") ///
+    note("Error bands correspond to 90% level of confidence. Shift-share IV constructed using j = 1.")
 }
 
 foreach g in `graphs' {
