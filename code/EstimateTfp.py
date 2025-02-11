@@ -51,7 +51,7 @@ SfeMat = np.vstack( # A useful matrix for calculating TfpEstimates
             ]
             )
 AnalysisDf['Z'] = np.exp((TfpModel(Data, T, S).ComputeRes(TfpModelObj.x) + SfeMat @ δ + β) * (1/(1-θ)))
-
+StateLong = pd.merge(StateLong, AnalysisDf[['StateName','year','Z']], how= 'left', on=['StateName','year'])
 # %%
 # Saving
-AnalysisDf.to_stata(Paths['data'] + '/StateAnalysisFileTfp.dta', write_index=False)
+StateLong.to_stata(Paths['data'] + '/StateAnalysisFileTfp.dta', write_index=False)
