@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+from scipy.optimize import least_squares
 
 Paths = {'data':'../data', 
          'cps':'../data/cps',
@@ -7,6 +8,9 @@ Paths = {'data':'../data',
          'gdp':'../data/gdp_state_industry_BEA',
          'preperiod':'../data/acs-pre-period'}
 
+'''#################################
+FUNCTIONS
+#################################'''
 def IpumsTidy(df):
     
     '''
@@ -75,3 +79,83 @@ def BeaTidy(df):
     )
 
     return Tidy
+
+'''#################################
+OBJECTS
+#################################'''
+class TfpModel:
+    '''
+    The TfpModel object includes methods for estimating Tfp. In the current version the only estimation
+    procedure implementable is Nonlinear least squares. In the future GMM may be included.
+
+    Data must be formatted with columns [Y K F D]. See slides
+    '''
+    def __init__(self,Data,T,S):
+        self.Data = Data                         # [logY logK F D]
+        self.T = T                               # Number of years in panel
+        self.S = S                               # Number of states in panel
+        self.N = T * S                           # Observations
+        self.p0 = np.ones(T - 1 + S - 1 + T + 5) # Initial parameter values
+    
+    def ComputeRes(self, p):
+        '''
+        Compute residual vector at parameter vector p. p is understood to be formatted as
+        p = [S - 1 state FEs, T - 1 time FEs, task shares for each T, 4 CES parameters, Intercept]
+        '''
+        ρ = p[-1]  # I store the CES parameters at the end of parameter vec
+        αD = p[-2] # Absolute advantage domestic
+        αF = p[-3] # Absolute advantage foreign
+        θ = p[-4]  # Cobb-Douglas Revenue Share
+        β = p[-5]  # Intercept
+        δ = np.append(p[:self.S-1], 0)               # State fixed effects - extra 0 for conformability
+        γ = np.append(p[self.S - 1: -5 - self.T], 0) # Time fixed effects - extra 0 for conformability
+        λ = p[self.T - 1 + self.S - 1:-5]
+        F, D = np.array(self.Data[:,2]), np.array(self.Data[:,3])
+        
+        
+        SelectorMat = np.tile(np.identity(self.T), (self.S,1))
+        logL = np.log((SelectorMat @ λ**(1-ρ)) * (αF * F)**ρ + (SelectorMat @ (1-λ)**(1-ρ)) * (αD * D)**ρ)
+        
+        logY = self.Data[:,0]
+        logK = self.Data[:,1]
+
+        # Create time fe and state fe vector
+        TfeMat = np.tile(np.diag(γ), (self.S,1))
+        SfeMat = np.vstack(
+            [ # Stack state indicaors in one N x (S-1) matrix; note that state S is the reference state
+            np.hstack([np.ones((self.T, 1)) if i == s else np.zeros([self.T ,1]) for i in range(self.S)]) 
+            for s in range(self.S)
+            ]
+            )
+        
+        return logY - (np.ones(self.N) * β + SfeMat @ δ + TfeMat @ γ + logK * θ + logL * ((1-θ)/ρ))
+    
+    def LsEstimates(self, p0 = None):
+        '''
+        Estimate Tfp using nonlinear least squares
+        '''
+        Lowerbounds = (
+            [-np.inf for s in range(self.S-1)] + # State fixed effects
+            [-np.inf for t in range(self.T-1)] + # Time fixed effects
+            [0 for t in range(self.T)]         + # Task shares
+            [-np.inf]                          + # Intercept 
+            [0]                                + # CD share 
+            [0 for i in range(2)]              + # foreign abs advantage, domestic abs advantage
+            [-np.inf])                           # CES Param
+        
+        Upperbounds = (
+            [np.inf for s in range(self.S-1)] + # State fixed effects
+            [np.inf for t in range(self.T-1)] + # Time fixed effects
+            [1 for t in range(self.T)]        + # Task shares
+            [np.inf]                          + # Intercept 
+            [1]                               + # CD share 
+            [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+            [1])                                # CES Param
+        
+        if p0 is  None:
+            return least_squares(self.ComputeRes,np.ones(self.S - 1 + self.T-1 + self.T + 5), 
+                                 bounds=(Lowerbounds,Upperbounds))
+        else:
+            return least_squares(self.ComputeRes,p0, bounds=(Lowerbounds,Upperbounds))
+    
+    
