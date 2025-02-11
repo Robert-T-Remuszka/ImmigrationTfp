@@ -35,7 +35,7 @@ Foreign = (
 Domestic = (
     StateLong.loc[StateLong['foreign'] == 0]
     .rename(columns={'BodiesSupplied':'D'})
-    .drop(columns = ['foreign','Y','K','logY','logK'])
+    .pipe(lambda x: x.loc[:,['statefip','StateName','year','D']])
 )
 AnalysisDf = Foreign.merge(Domestic,how='left',on=['statefip','StateName','year'])
 
