@@ -43,7 +43,7 @@ frame copy default Collapse
 frame Collapse {
 
     sort StateName year
-    collapse Z if year == 2018, by(StateName)
+    collapse Z if year == 2019, by(StateName)
     
     frlink 1:1 StateName, frame(StateDb)
     frget *, from(StateDb)
