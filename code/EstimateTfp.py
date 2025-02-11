@@ -4,6 +4,12 @@ import pandas as pd
 from Functions import *
 
 # %%
+StateLong = pd.read_stata(Paths['data'] + '/StateAnalysisFile.dta')
+leaveout = ['ImmigrantGroup','foreign','statefip','year','HoursSupplied','BodiesSupplied','Wage','StateName',
+            'NGdp','KNom','PriceDeflator','InvestmentDeflator']
+
+StateAggregates = {var:'mean' for var in StateLong.columns if var not in leaveout} | {'Y':'mean', 'K':'mean'}
+
 StateLong = (
     pd.read_stata(Paths['data'] + '/StateAnalysisFile.dta')
     .assign(
@@ -13,9 +19,7 @@ StateLong = (
     .rename(columns =  {'K':'KNom'})
     .assign(K = lambda x: x['KNom'] * 100 / x['InvestmentDeflator'])
     .groupby(['statefip','StateName','year','foreign'])
-    .agg({'BodiesSupplied':'sum',
-          'Y':'mean',
-          'K':'mean'})
+    .agg({'BodiesSupplied':'sum'}| StateAggregates)
     .reset_index()
     .assign(logY = lambda x: np.log(x['Y']),
             logK = lambda x: np.log(x['K']),
