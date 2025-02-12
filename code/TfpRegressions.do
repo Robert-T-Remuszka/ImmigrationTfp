@@ -195,7 +195,7 @@ frame Estimates {
     * Overlay the OLS and Iv estimates for Tfp
     tw line rho h, lc(ebblue) || line rhoIv h, lc(orange) || rarea top bottom h, fcolor(ebblue%30) lwidth(none) ///
     || rarea topIv bottomIv h, fcolor(orange%30) lwidth(none) ///
-    legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(-2(1)2,nogrid labsize(small)) ///
+    legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(,nogrid labsize(small)) ///
     yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}") ///
     note("Standard errors clustered by year, 90% confidence. Shift-share IV constructed using j = 1.")
     

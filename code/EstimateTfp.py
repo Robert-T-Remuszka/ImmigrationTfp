@@ -42,11 +42,23 @@ AnalysisDf = Foreign.merge(Domestic,how='left',on=['statefip','StateName','year'
 # %%
 S, T = 51, 2023 - 1994 + 1
 Data = AnalysisDf[['logY', 'logK', 'F', 'D']].to_numpy()
+'''
+A model without any time variation in the task shares can be estimated using,
+
 TfpModelObj = TfpModel(Data, T, S).LsEstimates(p0=np.hstack([np.ones(S - 1 + T - 1), # State and time Fes
                                                             0.50 * np.ones(1), # Task shares
                                                             0.85 * np.ones(3), # Intercept, absolute advantages
                                                             0.30 * np.ones(1),  # Capital share
                                                             0.85 * np.ones(1)])) # CES param
+
+This was the version of the model used in earlier versions of the paper to generate TFP estimates.
+'''
+TfpModelObj = TfpModel(Data, T, S).LsEstimates(p0=np.hstack([np.ones(S - 1 + T - 1), # State and time Fes
+                                                            0.50 * np.ones(T), # Task shares
+                                                            np.ones(3), # Intercept, absolute advantages
+                                                            0.30 * np.ones(1), # Capital share
+                                                            0.85 * np.ones(1)])) # CES param
+
 
 # %%
 θ = TfpModelObj.x[-4]  # Cobb-Douglas Revenue Share
@@ -64,5 +76,3 @@ AnalysisDf['Z'] = np.exp((TfpModel(Data, T, S).ComputeRes(TfpModelObj.x) + SfeMa
 # Saving
 AnalysisDf = AnalysisDf.rename(columns={'D':'BodiesSupplied0', 'F':'BodiesSupplied1'})
 AnalysisDf.to_stata(Paths['data'] + '/StateAnalysisFileTfp.dta', write_index=False)
-
-# %%
