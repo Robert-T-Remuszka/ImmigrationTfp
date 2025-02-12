@@ -40,10 +40,13 @@ Domestic = (
 AnalysisDf = Foreign.merge(Domestic,how='left',on=['statefip','StateName','year'])
 
 # %%
-S = 51
-T = 2023 - 1994 + 1
+S, T = 51, 2023 - 1994 + 1
 Data = AnalysisDf[['logY', 'logK', 'F', 'D']].to_numpy()
-TfpModelObj = TfpModel(Data, T, S).LsEstimates(p0= 0.85 * np.ones(S - 1 + T - 1 + T + 5))
+TfpModelObj = TfpModel(Data, T, S).LsEstimates(p0=np.hstack([np.ones(S - 1 + T - 1), # State and time Fes
+                                                            0.50 * np.ones(1), # Task shares
+                                                            0.85 * np.ones(3), # Intercept, absolute advantages
+                                                            0.30 * np.ones(1),  # Capital share
+                                                            0.85 * np.ones(1)])) # CES param
 
 # %%
 θ = TfpModelObj.x[-4]  # Cobb-Douglas Revenue Share

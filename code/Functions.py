@@ -146,36 +146,36 @@ class TfpModel:
             [-np.inf])                           # CES Param
         
             Upperbounds = (
-                [np.inf for s in range(self.S-1)] + # State fixed effects
-                [np.inf for t in range(self.T-1)] + # Time fixed effects
-                [np.inf for t in range(1)]        + # Task shares
-                [np.inf]                          + # Intercept 
-                [1]                               + # CD share 
-                [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
-                [1])                                # CES Param
+            [np.inf for s in range(self.S-1)] + # State fixed effects
+            [np.inf for t in range(self.T-1)] + # Time fixed effects
+            [np.inf for t in range(1)]        + # Task shares
+            [np.inf]                          + # Intercept 
+            [1]                               + # CD share 
+            [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+            [1])                                # CES Param
             
             return least_squares(self.ComputeRes, 0.5 * np.ones(self.S - 1 + self.T - 1 + 1 + 5),
-                                 bounds=(Lowerbounds,Upperbounds))
+                                 bounds=(Lowerbounds,Upperbounds),xtol=1e-5)
         else:
             Lowerbounds = (
             [-np.inf for s in range(self.S-1)] + # State fixed effects
             [-np.inf for t in range(self.T-1)] + # Time fixed effects
-            [-np.inf for t in range(self.T)]   + # Task shares
+            [-np.inf for t in range(len(p0[self.S - 1 + self.T - 1:-5]))]   + # Task shares
             [-np.inf]                          + # Intercept 
             [0]                                + # CD share 
             [-np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
             [-np.inf])                           # CES Param
         
             Upperbounds = (
-                [np.inf for s in range(self.S-1)] + # State fixed effects
-                [np.inf for t in range(self.T-1)] + # Time fixed effects
-                [np.inf for t in range(self.T)]   + # Task shares
-                [np.inf]                          + # Intercept 
-                [1]                               + # CD share 
-                [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
-                [1])                                # CES Param
+            [np.inf for s in range(self.S-1)] + # State fixed effects
+            [np.inf for t in range(self.T-1)] + # Time fixed effects
+            [np.inf for t in range(len(p0[self.S - 1 + self.T - 1:-5]))]   + # Task shares
+            [np.inf]                          + # Intercept 
+            [1]                               + # CD share 
+            [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+            [1])                                # CES Param
         
             return least_squares(self.ComputeRes,p0,
-                                 bounds=(Lowerbounds,Upperbounds))
+                                 method='trf',bounds=(Lowerbounds,Upperbounds), xtol=1e-5)
     
     
