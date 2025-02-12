@@ -95,7 +95,6 @@ class TfpModel:
         self.T = T                               # Number of years in panel
         self.S = S                               # Number of states in panel
         self.N = T * S                           # Observations
-        self.p0 = np.ones(T - 1 + S - 1 + T + 5) # Initial parameter values
     
     def ComputeRes(self, p):
         '''
@@ -107,20 +106,22 @@ class TfpModel:
         αF = p[-3] # Absolute advantage foreign
         θ = p[-4]  # Cobb-Douglas Revenue Share
         β = p[-5]  # Intercept
-        δ = np.append(p[:self.S-1], 0)               # State fixed effects - extra 0 for conformability
-        γ = np.append(p[self.S - 1: -5 - self.T], 0) # Time fixed effects - extra 0 for conformability
-        λ = p[self.T - 1 + self.S - 1:-5]
+        δ = np.append(0,p[:self.S - 1])                          # State fixed effects - extra 0 for conformability
+        γ = np.append(0,p[self.S - 1:self.S - 1 + self.T - 1])   # Time fixed effects - extra 0 for conformability
+        λ = p[self.S - 1 + self.T - 1:-5]                        # Task shares; these can be time varying too
         F, D = np.array(self.Data[:,2]), np.array(self.Data[:,3])
         
-        
-        SelectorMat = np.tile(np.identity(self.T), (self.S,1))
-        logL = np.log((SelectorMat @ λ**(1-ρ)) * (αF * F)**ρ + (SelectorMat @ (1-λ)**(1-ρ)) * (αD * D)**ρ)
+        SelectorMat = np.tile(np.identity(len(λ)), (self.S,1))
+        if len(λ) == 1:
+            logL = ρ **-1 * np.log((λ**(1-ρ)) * (αF * F)**ρ + ((1-λ)**(1-ρ)) * (αD * D)**ρ)
+        else:
+            logL = ρ**-1 * np.log((SelectorMat @ λ**(1-ρ)) * (αF * F)**ρ + (SelectorMat @ (1-λ)**(1-ρ)) * (αD * D)**ρ)
         
         logY = self.Data[:,0]
         logK = self.Data[:,1]
 
         # Create time fe and state fe vector
-        TfeMat = np.tile(np.diag(γ), (self.S,1))
+        TfeMat = np.tile(np.identity(self.T), (self.S,1))
         SfeMat = np.vstack(
             [ # Stack state indicaors in one N x (S-1) matrix; note that state S is the reference state
             np.hstack([np.ones((self.T, 1)) if i == s else np.zeros([self.T ,1]) for i in range(self.S)]) 
@@ -128,34 +129,53 @@ class TfpModel:
             ]
             )
         
-        return logY - (np.ones(self.N) * β + SfeMat @ δ + TfeMat @ γ + logK * θ + logL * ((1-θ)/ρ))
+        return logY - (np.ones(self.N) * β + SfeMat @ δ + TfeMat @ γ + θ * logK + (1-θ) * logL)
     
     def LsEstimates(self, p0 = None):
         '''
         Estimate Tfp using nonlinear least squares
         '''
-        Lowerbounds = (
+        if p0 is  None:
+            Lowerbounds = (
             [-np.inf for s in range(self.S-1)] + # State fixed effects
             [-np.inf for t in range(self.T-1)] + # Time fixed effects
-            [0 for t in range(self.T)]         + # Task shares
+            [-np.inf for t in range(1)]        + # Task shares
             [-np.inf]                          + # Intercept 
             [0]                                + # CD share 
-            [0 for i in range(2)]              + # foreign abs advantage, domestic abs advantage
+            [-np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
             [-np.inf])                           # CES Param
         
-        Upperbounds = (
-            [np.inf for s in range(self.S-1)] + # State fixed effects
-            [np.inf for t in range(self.T-1)] + # Time fixed effects
-            [1 for t in range(self.T)]        + # Task shares
-            [np.inf]                          + # Intercept 
-            [1]                               + # CD share 
-            [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
-            [1])                                # CES Param
-        
-        if p0 is  None:
-            return least_squares(self.ComputeRes,np.ones(self.S - 1 + self.T-1 + self.T + 5), 
+            Upperbounds = (
+                [np.inf for s in range(self.S-1)] + # State fixed effects
+                [np.inf for t in range(self.T-1)] + # Time fixed effects
+                [np.inf for t in range(1)]        + # Task shares
+                [np.inf]                          + # Intercept 
+                [1]                               + # CD share 
+                [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+                [1])                                # CES Param
+            
+            return least_squares(self.ComputeRes, 0.5 * np.ones(self.S - 1 + self.T - 1 + 1 + 5),
                                  bounds=(Lowerbounds,Upperbounds))
         else:
-            return least_squares(self.ComputeRes,p0, bounds=(Lowerbounds,Upperbounds))
+            Lowerbounds = (
+            [-np.inf for s in range(self.S-1)] + # State fixed effects
+            [-np.inf for t in range(self.T-1)] + # Time fixed effects
+            [-np.inf for t in range(self.T)]   + # Task shares
+            [-np.inf]                          + # Intercept 
+            [0]                                + # CD share 
+            [-np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+            [-np.inf])                           # CES Param
+        
+            Upperbounds = (
+                [np.inf for s in range(self.S-1)] + # State fixed effects
+                [np.inf for t in range(self.T-1)] + # Time fixed effects
+                [np.inf for t in range(self.T)]   + # Task shares
+                [np.inf]                          + # Intercept 
+                [1]                               + # CD share 
+                [np.inf for i in range(2)]        + # foreign abs advantage, domestic abs advantage
+                [1])                                # CES Param
+        
+            return least_squares(self.ComputeRes,p0,
+                                 bounds=(Lowerbounds,Upperbounds))
     
     
