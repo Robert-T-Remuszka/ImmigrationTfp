@@ -36,8 +36,6 @@ I also download population estimates. These were originally for weighting, but I
     - Note: I download the table "Annual Estimates of the Resident Population for the United States, Regions
     States, District of Columbia and Puerto Rico"
 -->
-
-
 # Cleaning
 There are several files that combine these raw data sources to create a panel of US states. Here are links to the files in order of which they are run and the tasks they complete;
 1. [Estimate Capital Stock by State](code/CapStockByStateEstimates.do)
@@ -50,6 +48,3 @@ These files can be run in any order. The two primary files here are
     - [State Level](code/TfpRegressions.do)
 2. Exploration
     - [Chloropleth Map of Tfp Estimates](code/StateTfpGraphs.do)
-# Estimating TFP by US State
-The method used for this is described in the slides. The code that implements that method can be found in
-[EstimateTfp.do](code/EstimateTfp.do)
