@@ -2,6 +2,7 @@ clear all
 set mem 10g
 do Globals
 loc graphs "OlsOutput OlsTfp OlsCapital IvOlsTfp"
+loc samp1 !inlist(statefip, "11")
 
 use "$Data/StateAnalysisFileTfp.dta", clear
 
@@ -125,24 +126,26 @@ forvalues h = -2/10 {
     di "***********************************************************************************************************"
     if `h' < 0 loc horizon = "Back" + string(abs(`h'))
     if `h' >= 0 loc horizon = "Forward" + string(abs(`h'))
-    qui reghdfe z`horizon' f [pw = wt], absorb(State year) vce(robust)
+    qui reghdfe z`horizon' f [pw = wt], absorb(State year) vce(cluster year)
     frame Estimates {
         insobs 1
         replace h = `h' if _n == _N
         replace rho = _b[f] if _n == _N
         replace se = _se[f] if _n == _N
     }
-    qui reghdfe y`horizon' f [pw = wt], absorb(State year) vce(robust)
+    
+    qui reghdfe y`horizon' f [pw = wt], absorb(State year) vce(cluster year)
     frame Estimates {
         replace rhoY = _b[f] if _n == _N
         replace seY = _se[f] if _n == _N
     }
-    qui reghdfe k`horizon' f [pw = wt], absorb(State year) vce(robust)
+    qui reghdfe k`horizon' f [pw = wt], absorb(State year) vce(cluster year)
     frame Estimates {
         replace rhoK = _b[f] if _n == _N
         replace seK = _se[f] if _n == _N
     }
-    cap ivregress 2sls z`horizon' (f = PredictedFlowl1) i.year i.State [pw=wt], vce(robust)
+    
+    cap ivregress 2sls z`horizon' (f = PredictedFlowl1) i.year i.State [pw=wt], vce(cluster year)
     if _rc != 0 {
         frame Estimates {
             replace rhoIv = 0 if _n == _N
@@ -157,7 +160,6 @@ forvalues h = -2/10 {
         }
     }
     
-
 }
 
 /***************************
@@ -177,7 +179,7 @@ frame Estimates {
     tw line rho h, lc(ebblue) || rarea top bottom h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
     legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
     name(OlsTfp) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
-
+    
     tw line rhoY h, lc(ebblue) || rarea topY bottomY h, fcolor(ebblue%30) lcolor(ebblue%50) lwidth(thin) ///
     legend(off) xlab(-2(1)10,nogrid) ylab(,nogrid) yline(0,lc(black%70) lp(solid)) ///
     name(OlsOutput) ytitle("{&beta}{subscript:h}") note("Error bands correspond to 90% level of confidence.")
@@ -193,9 +195,10 @@ frame Estimates {
     * Overlay the OLS and Iv estimates for Tfp
     tw line rho h, lc(ebblue) || line rhoIv h, lc(orange) || rarea top bottom h, fcolor(ebblue%30) lwidth(none) ///
     || rarea topIv bottomIv h, fcolor(orange%30) lwidth(none) ///
-    legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(-2(1)5,nogrid labsize(small)) ///
+    legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(-2(1)2,nogrid labsize(small)) ///
     yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}") ///
-    note("Error bands correspond to 90% level of confidence. Shift-share IV constructed using j = 1.")
+    note("Standard Errors clustered by year, 90% confidence. Shift-share IV constructed using j = 1.")
+    
 }
 
 foreach g in `graphs' {
