@@ -197,7 +197,7 @@ frame Estimates {
     || rarea topIv bottomIv h, fcolor(orange%30) lwidth(none) ///
     legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(-2(1)2,nogrid labsize(small)) ///
     yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}") ///
-    note("Standard Errors clustered by year, 90% confidence. Shift-share IV constructed using j = 1.")
+    note("Standard errors clustered by year, 90% confidence. Shift-share IV constructed using j = 1.")
     
 }
 
