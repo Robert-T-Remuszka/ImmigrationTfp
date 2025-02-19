@@ -1,4 +1,4 @@
-# Project Description
+# ImmigrationTfp
 There are plenty of historical examples which suggest a relationship between immigration and economic growth. Indeed, many household names in American innovation are foreign born; Andrew Carnegie, Nikola Tesla, Sergey Brin and Elon Musk to name a few. Often missed in these historical examples, however, is the idea that foreign and native born individuals may hold a comparative advantage in different tasks. Thus, insofar as migration leads to labor specialization, aggregate productivity may stand to rise. This paper explores a task-based framework of labor specialization whereby an economy's domestic and foreign born labor are assigned to tasks in production. Foreign and domestic born labor have varying degress of comparative advantage in these tasks.
 
 # Raw Data Sources
