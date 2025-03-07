@@ -1,6 +1,6 @@
 clear all
 do Globals
-loc graphs "IvOlsTfp IvLooOlsTfp FirstStageF"
+loc graphs "IvOlsTfp IvLooOlsTfp FirstStageF ExclusionTest"
 loc samp1 !inlist(statefip, "11")
 loc samp2 year >= 1995
 
@@ -157,6 +157,10 @@ frame Estimates {
     gen seIvLoo = .
     gen FStatIvLoo = .
 
+    * Exclusion test
+    gen ExclusionTest = .
+    gen seExclusionTest = .
+
 }
 
 forvalues h = -2/10 {
@@ -202,6 +206,19 @@ forvalues h = -2/10 {
             replace rhoIvLoo = _b[f] if _n == _N
             replace seIvLoo = _se[f] if _n == _N
         }
+
+        * Implement exclusion test
+        qui {
+            ivregress 2sls z`horizon' (f = PredictedFlowl1) i.year i.State [pw=wt], vce(cluster year)
+            predict double res, residuals
+            reg res PredictedFlowl1, vce(cluster year)
+            drop res
+        }
+
+        frame Estimates {
+            replace ExclusionTest = _b[PredictedFlowl1] if _n == _N    // The idea is this should be zero
+            replace seExclusionTest = _se[PredictedFlowl1] if _n == _N
+        }
         
     }
 
@@ -213,42 +230,10 @@ forvalues h = -2/10 {
             replace FStatIvLoo = 0 if _n == _N
             replace rhoIvLoo = 0 if _n == _N
             replace seIvLoo = 0 if _n == _N
+            replace ExclusionTest = 0 if _n == _N
+            replace seExclusionTest = 0 if _n == _N
         }
     }
-    //cap ivregress 2sls z`horizon' (f = PredictedFlowl1) i.year i.State [pw=wt], vce(cluster year)
-    //estat firststage
-    //loc FStat = r(singleresults)[1,4]
-    /*if _rc != 0 {
-        frame Estimates {
-            replace rhoIv = 0 if _n == _N
-            replace seIv = 0 if _n == _N
-        }
-    }
-    else {
-        frame Estimates {
-            replace FStatIv = `FStat'
-            replace rhoIv = _b[f] if _n == _N
-            replace seIv = _se[f] if _n == _N
-        }
-    }
-
-    cap ivregress 2sls z`horizon' (f = PredictedLooFlow1) i.year i.State [pw=wt], vce(cluster year)
-    estat firststage
-    loc FStat = r(singleresults)[1,4]
-    if _rc != 0 {
-        frame Estimates {
-            replace rhoIvLoo = 0 if _n == _N
-            replace seIvLoo = 0 if _n == _N
-        }
-    }
-    else {
-        frame Estimates {
-            replace FStatIvLoo = `FStat'
-            replace rhoIvLoo = _b[f] if _n == _N
-            replace seIvLoo = _se[f] if _n == _N
-        }
-    }
-    */ 
 }
 
 /***************************
@@ -257,18 +242,20 @@ Impulse Responses
 frame Estimates {
 
     gen top = 1.645 * se + rho
-    gen bottom = -1.645 * se + rho
+    gen bottom = - 1.645 * se + rho
     gen topIv  = 1.645 * seIv + rhoIv
-    gen bottomIv = -1.645 * seIv + rhoIv
+    gen bottomIv = - 1.645 * seIv + rhoIv
     gen topIvLoo = 1.645 * seIvLoo + rhoIvLoo
     gen bottomIvLoo = - 1.645 * seIvLoo + rhoIvLoo
+    gen topExclusionTest = 1.645 * seExclusionTest + ExclusionTest
+    gen bottomExclusionTest = - 1.645 * seExclusionTest + ExclusionTest
 
     * Overlay the OLS and Iv estimates for Tfp
     tw line rho h, lc(ebblue) || line rhoIv h, lc(orange) || rarea top bottom h, fcolor(ebblue%30) lwidth(none) ///
     || rarea topIv bottomIv h, fcolor(orange%30) lwidth(none) ///
     legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(,nogrid labsize(small)) ///
     yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}") ///
-    note("Standard errors clustered by year, 90% confidence. Shift-share IV constructed using j = 1.")
+    note("Standard errors clustered by year; 90% confidence")
 
     * Overlay the OLS and Iv estimates for Tfp using Loo flows
     tw line rho h, lc(ebblue) || line rhoIvLoo h, lc(orange) || rarea top bottom h, fcolor(ebblue%30) lwidth(none) ///
@@ -281,10 +268,17 @@ frame Estimates {
 Robustness Checks and Testing
 ****************************/
 frame Estimates {
+    
+    * Plot first stage F-Stats
     graph bar FStatIv FStatIvLoo if h > 0, over(h) bar(1, color(ebblue%70) fcolor(ebblue%70)) bar(2, color(orange%70) fcolor(orange%70)) ///
     ylab(0(20)200,nogrid labsize(small)) yline(10,lc(black%70) lp(dash)) ///
     legend(label(1 "Baseline Iv") label(2 "Leave One Out Iv") order(1 2) pos(1) ring(0)) b1title("Horizon") ytitle("First Stage F-Stat") ///
     name(FirstStageF)
+
+    * Plot excluded instrument coefficient
+    tw line ExclusionTest h, lc(ebblue) || rarea topExclusionTest bottomExclusionTest h, fcolor(ebblue%30) lwidth(none) ///
+    legend(label(2 "90% Confidence") order(2) pos(5) ring(0)) xlab(-2(1)10,nogrid labsize(small)) ylab(,nogrid labsize(small)) ///
+    yline(0,lc(black%70) lp(solid)) ytitle("Coefficient on Excluded Instrument") name(ExclusionTest)
 }
 /**************************
 Export Graphs
