@@ -11,6 +11,34 @@ Paths = {'data':'../data',
 '''#################################
 FUNCTIONS
 #################################'''
+def ImmigrantGroup(col):
+    '''
+    This function assigns observations to Immigrant Groups following the
+    classification in Peri (2012), for CPS and ACS data.
+    '''
+    if col in ['20000']:
+        return 'Mexico'
+    elif col[0] == '0':
+        return 'United States'
+    elif col in ['11000'] or (col[0:2] in ['21','25','26','30'] and col != '26030'):
+        return 'Latin America'
+    elif col[0:2] in ['41','42','43'] or col in ['45300','45000']:
+        return 'Western Europe'
+    elif col[0:2] in ['45','46'] and col not in ['45300','45000']:
+        return 'Russia and Eastern Europe'
+    elif col in ['15000','70020','70010']:
+        return 'Canada-Australia-New Zealand'
+    elif col in ['50000']:
+        return 'China'
+    elif col in ['52100']:
+        return 'India'
+    elif col[0:2] in ['50','51','52','55','53','54'] and col not in ['52100','50000']:
+        return 'Rest of Asia'
+    elif col[0:2] == '60':
+        return 'Africa'
+    else:
+        return 'Other'
+    
 def IpumsTidy(df):
     
     '''
