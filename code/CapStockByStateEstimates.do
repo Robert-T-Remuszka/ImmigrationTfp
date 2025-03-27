@@ -226,7 +226,16 @@ la var K ""
 
 save "$Data/CapitalStockByState.dta", replace
 
+******* Diagnostic Graph
+encode StateName, gen(StateNum)
+xtset StateNum year
+gen logK = log(K)
+la var logK "Log of Capital Stock Estimate"
+xtline logK if inrange(year,1994,2023), overlay legend(off) ///
+xlab(1994(1)2023,nogrid labsize(small) angle(45)) ylab(,nogrid) text(15.7 2014 "California", placement(w) size(small)) ///
+text(11 2014 "Vermont", placement(w) size(small)) name(CapStockByState) xtitle("")
 
+graph export "$Graphs/CapStockByState.pdf", name(CapStockByState) replace
 
 
 
