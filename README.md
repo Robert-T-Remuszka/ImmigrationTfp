@@ -36,6 +36,14 @@ I also download population estimates. These were originally for weighting, but I
     - Note: I download the table "Annual Estimates of the Resident Population for the United States, Regions
     States, District of Columbia and Puerto Rico"
 -->
+# API Keys
+To run any of the notebooks where an API key is required (see above) you will need your own API key from the respective source. You should create a file called ```Credentials.py``` and store it in the ```code``` directory. In that file, store a dictionary with the following format
+```python
+MyCredentials = {'IpumsApiKey':'YOUR_APIKEY',
+                 'FredApiKey':'YOUR_APIKEY',
+                 'BeaApiKey':'YOUR_APIKEY'}
+```
+
 # Cleaning
 There are several files that combine these raw data sources to create a panel of US states. Here are links to the files in order of which they are run and the tasks they complete;
 1. [Estimate Capital Stock by State](code/CapStockByStateEstimates.do)
