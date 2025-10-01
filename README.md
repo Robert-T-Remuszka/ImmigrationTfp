@@ -50,4 +50,5 @@ There are several files that combine these raw data sources to create a panel of
 1. [Estimate Capital Stock by State](code/CapStockByStateEstimates.do)
 2. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysis.ipynb)
 3. [Estimate and merge in TFP](code/EstimateTfp.py)
+    - [Make TFP by State Chloropleth](code/StateTfpGraphs.do)
 4. [Estimate $\eta_Z$](code/TfpRegressions.do)
