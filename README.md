@@ -44,15 +44,10 @@ MyCredentials = {'IpumsApiKey':'YOUR_APIKEY',
                  'BeaApiKey':'YOUR_APIKEY'}
 ```
 
-# Cleaning
+# Run Order
 There are several files that combine these raw data sources to create a panel of US states. Here are links to the files in order of which they are run and the tasks they complete;
+0. Downloading raw data: See linked files above. These can be run in any order.
 1. [Estimate Capital Stock by State](code/CapStockByStateEstimates.do)
 2. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysis.ipynb)
 3. [Estimate and merge in TFP](code/EstimateTfp.py)
-
-# Analysis
-These files can be run in any order. The two primary files here are
-1. Regressions
-    - [State Level](code/TfpRegressions.do)
-2. Exploration
-    - [Chloropleth Map of Tfp Estimates](code/StateTfpGraphs.do)
+4. [Estimate $\eta_Z$](code/TfpRegressions.do)
