@@ -24,6 +24,8 @@ The data come from several sources. In order to download the data and replicate 
 6. Employment Weighted SIC/NAICS crosswalk
     * Citation: Schaller, Z., & DeCelles, P. (2021). Weighted crosswalks for NAICS and SIC industry codes. Ann Arbor, MI: Inter-university Consortium for Political and Social Research [distributor], 44-76.
     * [ICPSR Link](https://www.openicpsr.org/openicpsr/project/145101/version/V2/view;jsessionid=BA9C29B51BC66A646EDB39977723F1DB?path=/openicpsr/145101/fcr:versions/V2/Published-Crosswalk-Files&type=folder)
+7. Capital Stock by State
+    * Method developed by El-Shagi and Yamarik (2021) update their capital stock estimates and provide them [here](https://cfds.henuecon.education/index.php/data/44-yes-capital-data).
 <!-- 
 I also download population estimates. These were originally for weighting, but I ended up weighting by employment, which can be calculated from the previous data.
 5. Intercensal population estimates by state. Manual download from:
