@@ -36,24 +36,21 @@ I also download population estimates. These were originally for weighting, but I
     - Note: I download the table "Annual Estimates of the Resident Population for the United States, Regions
     States, District of Columbia and Puerto Rico"
 -->
-# API Keys
-To run any of the notebooks where an API key is required (see above) you will need your own API key from the respective source. You should create a file called ```Credentials.py``` and store it in the ```code``` directory. In that file, store a dictionary with the following format
-```python
-MyCredentials = {'IpumsApiKey':'YOUR_APIKEY',
-                 'FredApiKey':'YOUR_APIKEY',
-                 'BeaApiKey':'YOUR_APIKEY'}
-```
 
 # Run Order
 There are several files that combine these raw data sources to create a panel of US states. Here are links to the files in order of which they are run and the tasks they complete;
-0. Downloading raw data: See linked files above. These can be run in any order.
+
+**Remark on Raw Data:** It is not advised that you run the raw data extract codes above since all the extract output is already included in the shared data file. The extract codes are only included so that the user can see how these extracts were generated. If you would like to execute the extract codes, you will need to create a python script called ```Credentials.py``` and create a dictionary consistent with the key references in the raw download data. To do that, you will need your own API keys to the referenced APIs above. If, for some reason you find yourself running the extract code more than once, be sure to remove the previously extracted files from the location where they were saved.
 
 1. [Estimate Capital Stock by State](code/CapStockByStateEstimates.do)
-
-2. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysis.ipynb)
-
-3. [Estimate and merge in TFP](code/EstimateTfp.py)
-
-    (i) [Make TFP by State Chloropleth](code/StateTfpGraphs.do)
-
-4. [Estimate $\eta_Z$](code/TfpRegressions.do)
+    * Output: ```data/CapitalStockByState.dta```
+2. [Clean the Pre-Period Data](code/CleanPrePeriod.do)
+    * Output: ```data/PrePeriod.dta```
+3. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysis.ipynb)
+    * Output: ```data/StateAnalysisFile.dta```
+4. [Estimate and merge in TFP](code/EstimateTfp.py)
+    * Output: ```data/StateAnalysisTfp.dta```
+5. [Make TFP by State Chloropleth](code/StateTfpGraphs.do)
+    * Output: ```output/graphs/TfpEstimates2019.pdf```
+5. [Estimate $\eta_Z$](code/TfpRegressions.do)
+    * Output(s): ```output/graphs/IvOlsTfp.pdf```, ```output/graphs/IvLooOlsTfp.pdf```, ```FirstStageF.pdf```
