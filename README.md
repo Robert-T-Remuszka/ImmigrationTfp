@@ -54,5 +54,5 @@ There are several files that combine these raw data sources to create a panel of
     * Output: ```data/StateAnalysisTfp.dta```
 5. [Make TFP by State Chloropleth](code/StateTfpGraphs.do)
     * Output: ```output/graphs/TfpEstimates2019.pdf```
-5. [Estimate $\eta_Z$](code/TfpRegressions.do)
+5. [Estimate Productivity Elasticity](code/TfpRegressions.do)
     * Output(s): ```output/graphs/IvOlsTfp.pdf```, ```output/graphs/IvLooOlsTfp.pdf```, ```FirstStageF.pdf```
