@@ -224,6 +224,45 @@ gen IndCapStock = VaShare * FixedAssets
 collapse (sum) K = IndCapStock, by(year statefip StateName)
 la var K ""
 
+******** Merge in El-Shagi and Yamarik
+frame create fred
+frame fred {
+    
+    import fred A006RD3Q086SBEA, daterange(1994 2023) aggr(a)
+    gen year = yofd(daten)
+    ren A pk
+
+    * Change base year to 2009
+    qui summ pk if year == 2009
+    replace pk = pk * 100 / `r(mean)'
+    keep year pk
+}
+
+frame create ElshagiYamarik 
+frame ElshagiYamarik {
+
+    use "${CapStock}/state_capital_yesdata21.dta", clear
+    tostring fip, gen(statefip)
+    replace statefip = "0" + statefip if strlen(statefip) == 1
+    keep statefip year cap
+
+    * Re-inflate (we will deflate later when estimating TFP)
+    frlink m:1 year, frame(fred)
+    frget pk, from(fred)
+    drop fred
+    frame drop fred
+    replace cap = cap * (pk/100)
+    drop pk
+    la var cap ""
+
+    tempfile capital
+    save `capital', replace 
+}
+
+merge 1:1 statefip year using "`capital'", nogen keep(1 3)
+ren K K_old
+ren cap K
+
 save "$Data/CapitalStockByState.dta", replace
 
 
