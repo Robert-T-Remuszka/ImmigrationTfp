@@ -4,29 +4,31 @@ loc graphs "IvOlsTfp IvLooOlsTfp FirstStageF ExclusionTest"
 loc samp1 !inlist(statefip, "11")
 loc samp2 year >= 1995
 
-use "$Data/StateAnalysisFileTfp.dta", clear
 
+import delimited "$Data/StateAnalysisFileTfp.csv", clear case(preserve)
+tostring statefip, replace
+replace statefip = "0" + statefip if strlen(statefip) == 1
 /*********************************************************************************************
 Cleaning
 **********************************************************************************************/
 encode StateName, gen(State)
-gen wt = BodiesSupplied1 + BodiesSupplied0           // Total Employment
+gen wt = BodiesSupplied01 + BodiesSupplied00           // Total Employment
 order State year
 xtset State year
-gen f = (f1.BodiesSupplied1 - BodiesSupplied1)/wt    // Create (endoegenous) migration flow
+gen f = (f1.BodiesSupplied01 - BodiesSupplied01)/wt    // Create (endoegenous) migration flow
 order State year
 forvalues h = -2/10 { // LHS variables
     if `h' < 0 loc name = "Back" + string(abs(`h'))
     if `h' >= 0 loc name = "Forward" + string(abs(`h'))
-    bysort State (year): gen z`name' = Z[_n + `h']/Z[_n] - 1
+    bysort State (year): gen z`name' = (Z[_n + `h']/Z[_n] - 1
     bysort State (year): gen y`name' = Y[_n + `h']/Y[_n] - 1
     bysort State (year): gen k`name' = K[_n + `h']/K[_n] - 1
 }
 
 * Past settlement instrument shares - I will also calculate more recent shares in another frame
-foreach v of varlist *_1960 {
+/*foreach v of varlist *_1960 {
     gen `v'_share = `v'/wt
-}
+}*/
 
 * Calculate Immigrant group shares
 frame create Shares
@@ -113,9 +115,9 @@ drop Shifts
 frame drop Shifts
 
 * Generate instruments
-gen settlement = Africa_1960_share * growth_1 + CaAuNz_1960_share * growth_2 + China_1960_share * growth_3 ///
+/*gen settlement = Africa_1960_share * growth_1 + CaAuNz_1960_share * growth_2 + China_1960_share * growth_3 ///
 + India_1960_share * growth_4 + LA_1960_share * growth_5 + Mexico_1960_share * growth_6 + Other_1960_share * growth_7 ///
-+ AsiaOther_1960_share * growth_8 + EastEu_1960_share * growth_9 + WestEu_1960_share * growth_10
++ AsiaOther_1960_share * growth_8 + EastEu_1960_share * growth_9 + WestEu_1960_share * growth_10*/
 
 gen PredictedFlow = share_1 * growth_1 + share_2 * growth_2 + share_3 * growth_3 + share_4 * growth_4 + share_5 * growth_5 + ///
 share_6 * growth_6 + share_7 * growth_7 + share_8 * growth_8 + share_9 * growth_9 + share_10 * growth_10
@@ -263,6 +265,8 @@ frame Estimates {
     legend(label(1 "OLS") label(2 "IV") order(1 2) pos(5) ring(0)) name(IvLooOlsTfp) xlab(-2(1)10,nogrid labsize(small)) ylab(,nogrid labsize(small)) ///
     yline(0,lc(black%70) lp(solid)) ytitle("{&beta}{subscript:h}")
 }
+
+rtr
 
 /***************************
 Robustness Checks and Testing
