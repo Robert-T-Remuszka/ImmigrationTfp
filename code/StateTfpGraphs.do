@@ -60,7 +60,7 @@ frame Collapse {
     ocolor(black%30) osize(0.05 ..) cln(9) legend(pos(4) title("Standardized Values", size(small))) ///
     name(TfpEstimates2019) 
 }
-rtr
+
 
 * Growth rates by state
 frame copy default Collapse, replace
