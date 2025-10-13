@@ -49,9 +49,11 @@ There are several files that combine these raw data sources to create a panel of
 2. [Clean the Pre-Period Data](code/CleanPrePeriod.do)
     * Output: ```data/PrePeriod.dta```
 3. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysis.ipynb)
-    * Output: ```data/StateAnalysisFile.dta```
+    * Output: ```data/StateAnalysisFile.dta```. This file is in long format and contains information on labor supplies by migrant groups.
+    This information will be brought back in after TFP is estimated.
 4. [Estimate and merge in TFP](code/EstimateTfp.py)
-    * Output: ```data/StateAnalysisTfp.dta```
+    * Output: ```data/StateAnalysisTfp.dta```. This file is formatted wide and only contains aggregated foreign and domestic born labor supplies. The breakdown
+    by group is in the file from step (3). Thus, in the regression files, there will be sections that use data from both files.
 5. [Make TFP by State Chloropleth](code/StateTfpGraphs.do)
     * Output: ```output/graphs/TfpEstimates2019.pdf```
 5. [Estimate Productivity Elasticity](code/TfpRegressions.do)
