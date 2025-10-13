@@ -59,7 +59,7 @@ end
 p0 = AuxParameters();
 T = length(unique(Wide[:, :year]));
 N = length(unique(Wide[:,:statefip]));
-x0 = vcat(0.85 * p0.ρ, p0.θ, p0.αᶠ, p0.αᵈ, 0.5 * p0.Inter, 0.5 * p0.δ[2:end], 0.5 * p0.ξ[2:end], 5. * p0.ζᶠ, 10. * p0.ζᵈ);
+x0 = vcat(0.5 * p0.ρ, p0.θ, p0.αᶠ, p0.αᵈ, 4. * p0.Inter, 0.5 * p0.δ[2:end], 0.5 * p0.ξ[2:end], 5. * p0.ζᶠ, 10. * p0.ζᵈ);
 
 #==============================================================================================
 VISUALIZATION
@@ -74,7 +74,7 @@ labels = [L"\alpha^F", L"\alpha^D", L"\zeta^F", L"\zeta^D"];
 params = [3, 4, length(x0) - 1, length(x0)];
 for (param, label) in zip(params, labels)
     
-    upper = x0[param] + 10.;
+    upper = x0[param] + 5.;
     lower = x0[param] - .5;
     
     vals = range(lower, upper, length = 10);
