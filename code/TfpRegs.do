@@ -169,7 +169,7 @@ forvalues h = -3/9 {
         if `h' < 0 loc horizon = "L" + string(abs(`h'))
         if `h' >= 0 loc horizon = "F" + string(abs(`h'))
 
-        qui ivreghdfe Zg_`horizon' (fg = Bartik_L1) [pw = emp] if `samp', absorb(state year) vce(robust)
+        qui ivreghdfe Zg_`horizon' (fg = Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
 
         * Record the results in the Estimates frame
         frame Estimates {
