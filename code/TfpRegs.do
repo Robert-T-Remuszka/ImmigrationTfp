@@ -207,7 +207,7 @@ frame Estimates {
     gen BetaIv1990_upper = BetaIv1990 + 1.96 * SeIv1990
     gen BetaIv1990_lower = BetaIv1990 - 1.96 * SeIv1990
 
-    tw scatter BetaIv1990 h if inrange(h,-3, 9), ms(oh) mc("0 147 245") xlab(-3(1)9, nogrid) || rcap BetaIv1990_upper BetaIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
+    tw connected BetaIv1990 h if inrange(h,-3, 9), ms(oh) mc("0 147 245") xlab(-3(1)9, nogrid) sort || rcap BetaIv1990_upper BetaIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
     ytitle("{&eta}{subscript:Z}") xtitle("Horizon") legend(off) yline(0, lc(black%50) lp(solid)) name(ZResponse_Iv1990)
 
 }
@@ -217,6 +217,7 @@ frame Estimates {
 
     graph bar FIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(20)180, nogrid labsize(small)) ///
     yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(ZResponse_Iv1990_F)
+    
 }
 
 * Export
