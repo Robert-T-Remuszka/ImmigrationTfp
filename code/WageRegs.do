@@ -138,7 +138,7 @@ egen Bartik_L1 = rowtotal(Bartik_L1_*), missing     // Lagged shares
 egen Bartik_L2 = rowtotal(Bartik_L2_*), missing
 
 * Calculate task aggregate growth rates
-forvalues h = -3/9 { // LHS variables
+forvalues h = -6/9 { // LHS variables
     if `h' < 0 loc name = "L" + string(abs(`h'))
     if `h' >= 0 loc name = "F" + string(abs(`h'))
     bys statefip (year): gen W01g_`name' = Wage01[_n + `h']/Wage01[_n - 1] - 1 // NOTE: These were already deflated when I estimated TFP
@@ -167,7 +167,7 @@ frame Estimates {
 
 }
 
-forvalues h = -3/9 {
+forvalues h = -6/9 {
 
     if `h' != -1 {
         di "***********************************************************************************************************"
@@ -177,7 +177,7 @@ forvalues h = -3/9 {
         if `h' >= 0 loc horizon = "F" + string(abs(`h'))
 
         * Foreign born
-        qui ivreghdfe W01g_`horizon' (fg = Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
+        qui ivreghdfe W01g_`horizon' (fg l.fg = Bartik_1990 l.Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
 
         * Record the results in the Estimates frame
         frame Estimates {
@@ -189,7 +189,7 @@ forvalues h = -3/9 {
         }
 
         * Domestic
-        qui ivreghdfe W00g_`horizon' (fg = Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
+        qui ivreghdfe W00g_`horizon' (fg l.fg = Bartik_1990 l.Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
 
         frame Estimates {
             insobs 1
@@ -233,21 +233,22 @@ frame Estimates {
     gen BetaDomesticIv1990_upper = BetaDomesticIv1990 + 1.96 * SeDomesticIv1990
     gen BetaDomesticIv1990_lower = BetaDomesticIv1990 - 1.96 * SeDomesticIv1990
 
-    tw connected BetaForeignIv1990 h if inrange(h,-3, 9), ms(oh) mc("0 147 245") xlab(-3(1)9, nogrid) sort || rcap BetaForeignIv1990_upper BetaForeignIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
+    tw connected BetaForeignIv1990 h if inrange(h,-6, 9), ms(oh) mc("0 147 245") xlab(-6(1)9, nogrid) sort || rcap BetaForeignIv1990_upper BetaForeignIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
     ytitle("{&epsilon}{subscript:F}") xtitle("Horizon") legend(off) yline(0, lc(black%50) lp(solid)) name(Wage01Response_Iv1990)
 
-    tw connected BetaDomesticIv1990 h if inrange(h,-3, 9), ms(oh) mc("0 147 245") xlab(-3(1)9, nogrid) sort || rcap BetaDomesticIv1990_upper BetaDomesticIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
+    tw connected BetaDomesticIv1990 h if inrange(h,-6, 9), ms(oh) mc("0 147 245") xlab(-6(1)9, nogrid) sort || rcap BetaDomesticIv1990_upper BetaDomesticIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
     ytitle("{&epsilon}{subscript:D}") xtitle("Horizon") legend(off) yline(0, lc(black%50) lp(solid)) name(Wage00Response_Iv1990)
 
 }
 
+
 * F Stats of IRF for pre-period
 frame Estimates {
 
-    graph bar FForeignIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(20)180, nogrid labsize(small)) ///
+    graph bar FForeignIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(10)40, nogrid labsize(small)) ///
     yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(Wage01Response_Iv1990_F)
 
-    graph bar FDomesticIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(20)180, nogrid labsize(small)) ///
+    graph bar FDomesticIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(10)40, nogrid labsize(small)) ///
     yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(Wage00Response_Iv1990_F)
     
 }

@@ -138,7 +138,7 @@ egen Bartik_L1 = rowtotal(Bartik_L1_*), missing     // Lagged shares
 egen Bartik_L2 = rowtotal(Bartik_L2_*), missing
 
 * Calculate task aggregate growth rates
-forvalues h = -3/9 { // LHS variables
+forvalues h = -6/9 { // LHS variables
     if `h' < 0 loc name = "L" + string(abs(`h'))
     if `h' >= 0 loc name = "F" + string(abs(`h'))
     bys statefip (year): gen Lg_`name' = L[_n + `h']/L[_n - 1] - 1
@@ -162,7 +162,7 @@ frame Estimates {
 
 }
 
-forvalues h = -3/9 {
+forvalues h = -6/9 {
 
     if `h' != -1 {
         di "***********************************************************************************************************"
@@ -171,7 +171,7 @@ forvalues h = -3/9 {
         if `h' < 0 loc horizon = "L" + string(abs(`h'))
         if `h' >= 0 loc horizon = "F" + string(abs(`h'))
 
-        qui ivreghdfe Lg_`horizon' (fg = Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
+        qui ivreghdfe Lg_`horizon' (fg l.fg = Bartik_1990 l.Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
 
         * Record the results in the Estimates frame
         frame Estimates {
@@ -208,7 +208,7 @@ frame Estimates {
     gen BetaIv1990_upper = BetaIv1990 + 1.96 * SeIv1990
     gen BetaIv1990_lower = BetaIv1990 - 1.96 * SeIv1990
 
-    tw connected BetaIv1990 h if inrange(h,-3, 9), ms(oh) mc("0 147 245") xlab(-3(1)9, nogrid) sort || rcap BetaIv1990_upper BetaIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
+    tw connected BetaIv1990 h if inrange(h,-6, 9), ms(oh) mc("0 147 245") xlab(-6(1)9, nogrid) sort || rcap BetaIv1990_upper BetaIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
     ytitle("{&eta}{subscript:L}") xtitle("Horizon") legend(off) yline(0, lc(black%50) lp(solid)) name(LResponse_Iv1990)
 
 }
@@ -216,7 +216,7 @@ frame Estimates {
 * F Stats of IRF for pre-period
 frame Estimates {
 
-    graph bar FIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(20)180, nogrid labsize(small)) ///
+    graph bar FIv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(0(10)40, nogrid labsize(small)) ///
     yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(LResponse_Iv1990_F)
     
 }
