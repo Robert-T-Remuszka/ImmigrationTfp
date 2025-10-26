@@ -192,7 +192,6 @@ forvalues h = -6/9 {
         qui ivreghdfe W00g_`horizon' (fg l.fg = Bartik_1990 l.Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
 
         frame Estimates {
-            insobs 1
             replace h = `h' if _n == _N
             replace BetaDomesticIv1990 = _b[fg] if _n == _N
             replace SeDomesticIv1990 = _se[fg] if _n == _N
