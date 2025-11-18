@@ -27,9 +27,11 @@ There are several files that combine these raw data sources to create a panel of
     * *Remark:* The extract should be run before the read files
     * [ACS extract here](code/AcsPull.ipynb), [CPS extract here](code/CpsPull.ipynb)
     * [Read and save ACS extract](code/AcsRead.ipynb), [Read and save CPS extract](code/CpsRead.ipynb)
-3. [Clean ACS, CPS, GDP by State and Merge](code/MakeStateAnalysisPreTfp.do)
-    * Output: ```data/StateAnalysisFile.dta```.
-4. [**Estimate and merge in TFP**](code/EstimateTfp.py)
-    * Output: ```data/StateAnalysisTfp.dta```.
-5. [**Estimate Productivity Elasticity**](code/TfpRegressions.do)
+3. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
+    * Output: ```data/StateAnalysisPreTfp.dta```.
+4. [**Estimate TFP**](code/EstimateTfp.jl)
+    * Output: ```data/StateTfpAndTaskAgg.csv```
+5. [**Merge in TFP**](code/MakeStateAnalysis.do)
+    * Output: ```data/StateAnalysis.dta```
+6. [**Estimate Productivity Elasticity**](code/TfpRegressions.do)
     * Output(s): ```output/graphs/IvOlsTfp.pdf```, ```output/graphs/IvLooOlsTfp.pdf```, ```FirstStageF.pdf```
