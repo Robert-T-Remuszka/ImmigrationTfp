@@ -504,6 +504,5 @@ la var Wage            "Wage, average"
 /***********
     SAVING
 ***********/
-label save using VarLabels.do, replace
 sort statefip year
 save "${Data}/StateAnalysisPreTfp.dta", replace
