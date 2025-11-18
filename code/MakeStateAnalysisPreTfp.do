@@ -471,4 +471,4 @@ drop p pk
     SAVING
 ***********/
 label save using VarLabels.do, replace
-save "${Data}/StateAnalysisFile.dta", clear
+save "${Data}/StateAnalysisFile.dta", replace
