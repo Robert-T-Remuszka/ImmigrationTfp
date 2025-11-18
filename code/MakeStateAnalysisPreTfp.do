@@ -104,7 +104,7 @@ if !`skipIpums' {
                 if substr("`v'", 8, .) == "EastEu" loc origin "Russia and Eastern Europe"
                 if substr("`v'", 8, .) == "AsiaOther" loc origin "Asia Other"
 
-                la var `v' "Migrant quantity, `origin'"
+                la var `v' "Foreign-born quantity, `origin'"
             }
         }
 
@@ -193,7 +193,7 @@ if !`skipIpums' {
                 if substr("`v'", 6, .) == "EastEu" loc origin "Russia and Eastern Europe"
                 if substr("`v'", 6, .) == "AsiaOther" loc origin "Asia Other"
                 
-                la var `v' "Migrant wage (2017 Dollars), `origin'"
+                la var `v' "Foreign-born wage (2017 Dollars), `origin'"
             }
 
             qui ds Supply_*
@@ -207,7 +207,7 @@ if !`skipIpums' {
                 if substr("`v'", 8, .) == "EastEu" loc origin "Russia and Eastern Europe"
                 if substr("`v'", 8, .) == "AsiaOther" loc origin "Asia Other"
 
-                la var `v' "Migrant supply, `origin'"
+                la var `v' "Foreign-born quantity, `origin'"
             }
         }
 
@@ -417,6 +417,8 @@ if !`skipMerge' {
 * Label some stuff
 la var state ""
 la var CapStock "Real Capital Stock, 2017 Dollars"
+la var Supply_US "Domestic-born quantity"
+la var Wage_US "Domestic-born wage (2017 Dollars)"
 
 * Convert to common base year (2017)
 frame create InvDeflator 
@@ -467,8 +469,41 @@ replace GDP = GDP / p
 replace CapStock = CapStock / pk
 drop p pk
 
+/************************************
+    CALCULATE FOREIGN AND DOMESTIC SUPPLIES/WAGES
+************************************/
+* Quantities
+egen Supply_Total    = rowtotal(Supply_*)
+gen  Supply_Foreign  = Supply_Total - Supply_US
+gen  Supply_Domestic = Supply_US
+
+* Wages (quantitiy weighted)
+qui ds Wage_*
+foreach v in `r(varlist)' {
+
+    loc origin = substr("`v'", 6, .)
+    gen Wage_weighted_`origin' = Supply_`origin' * Wage_`origin'
+
+}
+
+egen Wage_Total    = rowtotal(Wage_weighted_*)
+gen  Wage_Foreign  = (Wage_Total - Wage_weighted_US) / Supply_Foreign
+gen  Wage_Domestic = Wage_US
+gen  Wage = Wage_Total / Supply_Total
+
+drop Wage_weighted_* Wage_Total
+
+* Add some labels
+la var Supply_Total    "Quantity of labor, total"
+la var Supply_Foreign  "Quantity of labor, foreign-born"
+la var Supply_Domestic "Quantity of labor, domestic-born"
+la var Wage_Foreign    "Wage, foreign-born"
+la var Wage_Domestic   "Wage, domestic"
+la var Wage            "Wage, average"
+
 /***********
     SAVING
 ***********/
 label save using VarLabels.do, replace
-save "${Data}/StateAnalysisFile.dta", replace
+sort statefip year
+save "${Data}/StateAnalysisPreTfp.dta", replace
