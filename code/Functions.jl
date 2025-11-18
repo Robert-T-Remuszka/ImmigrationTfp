@@ -21,14 +21,14 @@ Constructor for the AuxParameters type.
     - df should be sorted, state then year. Thus, reference levels for fixed effects are Alabama in 1994
 """
 function AuxParameters(;
-    ρ::T1 = 1.,
+    ρ::T1 = 0.5,
     θ::T1 = 0.3,
     αᶠ::T1 = 1.,
     αᵈ::T1 = 1.,
     Inter::T1 = 1.,
     ζᶠ::T1 = 1.,
     ζᵈ::T1 = 1.,
-    df::DataFrame = Wide,
+    df::DataFrame = StateAnalysis,
     N::Int64 = length(unique(df[:,:statefip])),             # Number of years
     T::Int64 = length(unique(df[:,:year])),                 # Number of units
     δ::Vector{T1} = vcat(0., ones(N - 1)),
@@ -42,7 +42,7 @@ end
 """
 Calculate the cutoff task.
 """
-function 𝒯(p::AuxParameters; df::DataFrame = Wide)
+function 𝒯(p::AuxParameters; df::DataFrame = StateAnalysis)
 
     (; ζᶠ, ζᵈ, ρ, αᶠ, αᵈ) = p
     
@@ -50,8 +50,8 @@ function 𝒯(p::AuxParameters; df::DataFrame = Wide)
     b = ρ/(1 - ρ)
     α = αᶠ/αᵈ
     ζ = (1 + ζᵈ * b)/(1 + ζᶠ * b)
-    wᵈ = df[:, :Wage00]
-    wᶠ = df[:, :Wage01]
+    wᵈ = df[:, :Wage_Domestic]
+    wᶠ = df[:, :Wage_Foreign]
 
 
     return ((wᵈ ./ wᶠ) * α * ζ^(-(1/b))).^(1/(ζᵈ - ζᶠ))
@@ -63,7 +63,7 @@ The residual function.
     - df should be sorted state and then year
     - The first element of λ and δ should be 0 to avoid collinearity
 """
-function Residual(p::AuxParameters; df::DataFrame = Wide)
+function Residual(p::AuxParameters; df::DataFrame = StateAnalysis)
     
     (; δ, ξ, ζᶠ, ζᵈ, θ, ρ, αᶠ, αᵈ, Inter) = p
 
@@ -84,11 +84,11 @@ function Residual(p::AuxParameters; df::DataFrame = Wide)
 
     # Calculate each part of the production function
     Z = (1 .+ T_cal.^(1 + ζᶠ * b) .- T_cal.^(1 + ζᵈ* b)).^(1/b)
-    K = df[:,:K]
-    F = df[:,:BodiesSupplied01]
-    D = df[:, :BodiesSupplied00]
+    K = df[:,:CapStock]
+    F = df[:,:Supply_Foreign]
+    D = df[:, :Supply_Domestic]
     L = (λ.^(1 - ρ) * (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) * (αᵈ * D).^ρ).^(1/ρ)
-    Y = df[:, :Y]
+    Y = df[:, :GDP]
 
     return log.(Y) - (Inter .+ SFE * δ + TFE * ξ + θ * log.(K) + (1 - θ) * log.(Z .* L)), Z, L
     
@@ -97,7 +97,7 @@ end
 """
 The sum of squared errors for state level production function.
 """
-function SSE(x::Vector{T1}; df::DataFrame = Wide) where{T1 <: Real}
+function SSE(x::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
 
     N = length(unique(df[:, :statefip]))
     T = length(unique(df[:, :year]))
