@@ -1,7 +1,7 @@
 clear all
 do Globals
 
-import delimited "${Data}/StateAnalysisFileTfp.csv", clear case(preserve)
+use "${Data}/StateAnalysis.dta", clear
 
 loc samp inrange(year, 1994, 2021)
 loc sampno21 inrange(year, 1994, 2020)
@@ -11,75 +11,25 @@ loc graphs "ZResponse_Iv1990 ZResponse_Iv1990_F"
 Some Cleaning
 *************************************************/
 
-* Change statefip to string of length 2
-tostring statefip, replace
-replace statefip = "0" + statefip if strlen(statefip) == 1
-
 * Total employment
-gen emp = BodiesSupplied00 + BodiesSupplied01
+gen emp = Supply_Total
 
 * Generate foreign-born labor share and its growth rate
-gen f = BodiesSupplied01
+gen f = Supply_Foreign
 bys statefip (year): gen fg = (f - f[_n - 1]) / emp
 
-/* The current dataset does not have the labor supplies of each 
-migrant group over time. It only has 1990 and prior. So, let's
-fetch these.
-*/
-frame create GroupBreakdown
-frame GroupBreakdown {
-
-    * Recall that, before we estimated TFP, this version of the file was in long format and had information
-    * on the labor supplies of each migrant group
-    use "${Data}/StateAnalysisFile.dta", clear
-    replace foreign = 1 if ImmigrantGroup != "United States"
-    keep ImmigrantGroup statefip year BodiesSupplied StateName
-
-    * Prepare to reshape wide
-    gen abbr = "_CaAuNz" if ImmigrantGroup == "Canada-Australia-New Zealand"
-    replace abbr = "_US" if ImmigrantGroup == "United States"
-    replace abbr = "_WestEu" if ImmigrantGroup == "Western Europe"
-    replace abbr = "_LA" if ImmigrantGroup == "Latin America"
-    replace abbr = "_EastEu" if ImmigrantGroup == "Russia and Eastern Europe"
-    replace abbr = "_AsiaOther" if ImmigrantGroup == "Rest of Asia"
-    replace abbr = "_China" if ImmigrantGroup == "China"
-    replace abbr = "_Africa" if ImmigrantGroup == "Africa"
-    replace abbr = "_Mexico" if ImmigrantGroup == "Mexico"
-    replace abbr = "_Other" if ImmigrantGroup == "Other"
-    replace abbr = "_India" if ImmigrantGroup == "India"
-
-    drop ImmigrantGroup StateName
-    
-    * Will have to come back to figure out what is happening with the duplicates
-    * For now, keep the duplicates which is a larger part of the foreign born
-    gsort abbr statefip year -BodiesSupplied
-    duplicates drop abbr statefip year, force
-
-    reshape wide Bodies*, i(statefip year) j(abbr) s
-
-    qui ds Bodies*
-    foreach v in `r(varlist)' {
-        replace `v' = 0 if mi(`v')
-    }
-
-}
-
-frlink m:1 statefip year, frame(GroupBreakdown)
-frget Bodies* , from(GroupBreakdown)
-drop GroupBreakdown
-
 * Calculate the shares
-qui ds BodiesSupplied_*
+qui ds Supply_*
 foreach v in `r(varlist)' {
 
-    loc region = subinstr("`v'", "BodiesSupplied_", "", 1)
+    loc region = subinstr("`v'", "Supply_", "", 1)
 
-    * Share of the foreign born population
-    if "`region'" != "US" {
+    if !inlist("`region'","Total", "Foreign", "Domestic", "US") {
 
         gen s_`region' = `v' / emp
         bys statefip (year): gen s_`region'_L1 = s_`region'[_n - 1]
         bys statefip (year): gen s_`region'_L2 = s_`region'[_n - 2]
+
     }
 
 }
@@ -88,8 +38,6 @@ foreach v in `r(varlist)' {
 qui ds *1990
 loc vars1990 "`r(varlist)'"
 egen emp1990 = rowtotal(`vars1990')
-gen BodiesSupplied01_1990 = emp1990 - US1990
-
 foreach v in `vars1990' {
     
     loc region = subinstr("`v'", "1990", "", 1)
@@ -98,42 +46,36 @@ foreach v in `vars1990' {
 
 }
 
-* Create aggregate shifts. Can use the GroupBreakdown frame again
-frame GroupBreakdown {
+* Create aggregate shifts
+egen emp_agg = total(emp), by(year)
+qui ds Supply_*
+foreach v in `r(varlist)' {
 
-    qui ds statefip year, not
-    collapse (sum) `r(varlist)', by(year)
-    egen emp = rowtotal(Bodies*)
-    qui ds Bodies*
-    foreach v in `r(varlist)' {
-        loc region = subinstr("`v'", "BodiesSupplied_", "", 1)
-        gen fg_agg_`region' = (`v' - `v'[_n - 1]) / emp
+    loc region = subinstr("`v'", "Supply_", "", 1)
+
+    if !inlist("`region'", "Total", "Foreign", "Domestic", "US") {
+
+        egen Supply_Agg_`region' = total(`v'), by(year)
+        bys statefip (year): gen fg_agg_`region' = (Supply_Agg_`region' - Supply_Agg_`region'[_n-1]) / emp_agg
+
     }
-
 }
-
-frlink m:1 year, frame(GroupBreakdown)
-frget fg_agg*, from(GroupBreakdown)
-drop GroupBreakdown
-
 
 * Create the Bartik instruments
 qui ds fg_agg_*
 foreach v in `r(varlist)' {
 
     loc region = subinstr("`v'", "fg_agg_", "", 1)
-    if !inlist("`region'", "Other", "US") {
-        gen Bartik_1990_`region' = s_`region'_1990 * `v'
-        gen Bartik_L1_`region' = s_`region'_L1 * `v'
-        gen Bartik_L2_`region' = s_`region'_L2 * `v'
-    }
+    gen Bartik_1990_`region' = s_`region'_1990 * `v'
+    gen Bartik_L1_`region' = s_`region'_L1 * `v'
+    gen Bartik_L2_`region' = s_`region'_L2 * `v'
 
 }
 
-
-egen Bartik_1990 = rowtotal(Bartik_1990_*), missing // Pre-period shares
-egen Bartik_L1 = rowtotal(Bartik_L1_*), missing     // Lagged shares
-egen Bartik_L2 = rowtotal(Bartik_L2_*), missing
+egen Bartik_1990 = rowtotal(Bartik_1990_*), missing     // Pre-period shares
+egen Bartik_L1   = rowtotal(Bartik_L1_*),   missing     // Lagged shares
+egen Bartik_L2   = rowtotal(Bartik_L2_*),   missing
+drop Bartik_1990_* Bartik_L1_* Bartik_L2_*
 
 * Calculate TFP Growth rates
 forvalues h = -9/9 { // LHS variables
@@ -142,6 +84,7 @@ forvalues h = -9/9 { // LHS variables
     bys statefip (year): gen Zg_`name' = Z[_n + `h']/Z[_n - 1] - 1
 }
 
+ren state statename
 encode statefip, gen(state)
 xtset state year
 
@@ -169,7 +112,7 @@ forvalues h = -6/9 {
         if `h' < 0 loc horizon = "L" + string(abs(`h'))
         if `h' >= 0 loc horizon = "F" + string(abs(`h'))
 
-        qui ivreghdfe Zg_`horizon' (fg l.fg = Bartik_1990 l.Bartik_1990) [pw = emp] if `samp', absorb(state year) vce(robust)
+        qui ivreghdfe Zg_`horizon' (fg = Bartik_1990) l.Zg_`horizon' [pw = emp] if `samp', absorb(state year) vce(robust)
 
         * Record the results in the Estimates frame
         frame Estimates {
@@ -209,6 +152,7 @@ frame Estimates {
 
     tw connected BetaIv1990 h if inrange(h,-6, 9), ms(oh) mc("0 147 245") xlab(-6(1)9, nogrid) sort || rcap BetaIv1990_upper BetaIv1990_lower h, lcolor("0 147 245") ylab(, nogrid) ///
     ytitle("{&eta}{subscript:Z}") xtitle("Horizon") legend(off) yline(0, lc(black%50) lp(solid)) name(ZResponse_Iv1990)
+    rtr
 
 }
 
