@@ -222,16 +222,17 @@ if !`skipIpums' {
 if !`skipBea' {
 
     /*********************************
-            CLEAN 1963 to 1997
+            CLEAN 1963 to 1996
     **********************************/
     frame create StateGdp63to97 
     frame StateGdp63to97 {
 
         import delimited "${GdpData}/SAGDP_SIC/SAGDP2S__ALL_AREAS_1963_1997.csv", clear
-
+        
         * Only interested in industry totals for each state
         keep if description == "All industry total"
-        drop if geoname == "United States"
+        drop if inlist(geoname, "United States", "Far West", "Rocky Mountain", "Southwest", "Southeast", "Plains", ///
+        "Great Lakes", "Mideast", "New England")
 
         * Extract the numerical part of the fips code + drop trailing zeros
         replace geofips = substr(geofips, 3, 2)
@@ -262,7 +263,7 @@ if !`skipBea' {
     }
 
     /*********************************
-            CLEAN 1998 to 2023
+            CLEAN 1997 to 2023
     **********************************/
     frame create StateGdp97to23
     frame StateGdp97to23 {
@@ -270,9 +271,10 @@ if !`skipBea' {
         import delimited "${GdpData}/SAGDP/SAGDP2N__ALL_AREAS_1997_2023.csv", clear
         
         * Only interested in industry totals for each state
-        keep if linecode == 3
-        drop if geoname == "United States *"
-    
+        keep if linecode == 1 // Same as keeping all industry total (tab description if linecode == 1)
+        drop if inlist(geoname, "United States *", "Far West", "Rocky Mountain", "Southwest", "Southeast", "Plains", ///
+        "Great Lakes", "Mideast", "New England")
+        
         * Extract the numerical part of the fips code + drop trailing zeros
         replace geofips = substr(geofips, 3, 2)
 
@@ -287,6 +289,7 @@ if !`skipBea' {
             la var GDP_`yyyy' ""
 
         }
+        
 
         * Reshape long
         reshape long GDP_, i(geofips geoname) j(year)
@@ -310,6 +313,7 @@ if !`skipBea' {
         save `StateGdp', replace
     }
 }
+
 
 /*********************************
     CLEAN AND MERGE EL-SHAGI AND YAMARIK
@@ -341,14 +345,16 @@ if !`skipEY' {
     frame CapStocks {
         
         use "${CapStock}/state_capital_yesdata21.dta", clear
-    
+
+        * Eyeballing the graph on the website, national stock should be about 21 trillion -> units here are in millions
+        replace cap = cap * 1e+6 
+        
         * Make statefip consistent with other data
         tostring fips, gen(statefip)
         drop fips
         replace statefip = "0" + statefip if strlen(statefip) == 1
         keep statefip year cap
-        replace cap = cap * 1e+6 // Eyeballing the graph on the website, national stock should be about 21 trillion -> units here are in millions
-
+        
         * Reinflate
         frlink m:1 year, frame(InvDeflator)
         frget pk, from(InvDeflator)
@@ -364,7 +370,7 @@ if !`skipEY' {
 }
 
 /*********************************
-    CLEAN AND MERGE STATE GDP
+    CLEAN AND MERGE Pre period counts
 **********************************/
 if !`skipPrePeriod' {
 
