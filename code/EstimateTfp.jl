@@ -1,71 +1,61 @@
-using DataFrames, StatFiles, TidierData, LinearAlgebra, Plots, LaTeXStrings, CSV
-using Optimization, Zygote
+using DataFrames, StatFiles, LinearAlgebra, Plots, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
 include("Globals.jl");
 include("Functions.jl");
 
 # Read in the state level data
-StateAnalysis = DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta")))
+StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))) begin
+    @mutate(
+        CapStock = Float64.(CapStock),
+        Supply_Foreign = Float64.(Supply_Foreign), 
+        Supply_Domestic = Float64.(Supply_Domestic),
+        GDP = Float64.(GDP),
+        Wage_Domestic = Float64.(Wage_Domestic),
+        Wage_Foreign = Float64.(Wage_Foreign)
+    )
+end;
 
-p0 = AuxParameters();
+p0 = AuxParametersConstructor();
+Δ0 = 5.;
+δ0 = 1.;
 T = length(unique(StateAnalysis[:, :year]));
-N = length(unique(StateAnalysis[:,:statefip]));
-x0 = vcat(p0.ρ, p0.θ, p0.αᶠ, p0.αᵈ, p0.Inter, p0.δ[2:end], 2. * p0.ξ[2:end], 1. * p0.ζᶠ, 6. * p0.ζᵈ);
-
+N = length(unique(StateAnalysis[:, :statefip]));
+x0 = vcat(p0.ρ, p0.θ, p0.ζᶠ, Δ0, δ0, p0.ξ, p0.χ, p0.Inter);
 #==============================================================================================
 VISUALIZATION
-Vary each parameter one by one from the starting point to see how the residuals change.
+1. Are there any restrictions we should place on s̄ for good behavior of the optimization?
 ==============================================================================================#
+#=
+How does s̄ change with the ζ's and the α's? Let's plot some surfaces.
+=#
+ζ_range = range(0., 20., 100);
+Δ_range = range(0., 10., 100);
+sbar_vals = [mean(s̄(AuxParametersConstructor(ζᶠ = ζᶠ, Δ = Δ))[1]) for ζᶠ in ζ_range, Δ in Δ_range];
+surface(ζ_range, Δ_range, sbar_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (35, 25))
+
+δ_range = range(-2., 10., 50); # REMARK: Below 2 and s̄ > 1 which leads to numerical instability so we will avoid that.
+sbar_vals = [mean(s̄(AuxParametersConstructor(δ = δ))[1]) for δ in δ_range];
+scatter(δ_range, sbar_vals, xlabel = L"\delta", grid = false, label = L"\bar s")
 
 #=
-For each of the scalar parameters, loop through a grid and plot
+What does the objective function looks like?
 =#
-plots = [];
-labels = [L"\alpha^F", L"\alpha^D", L"\zeta^F", L"\zeta^D"];
-params = [3, 4, length(x0) - 1, length(x0)];
-for (param, label) in zip(params, labels)
-    
-    upper = x0[param] + 5.;
-    lower = x0[param] - .5;
-    
-    vals = range(lower, upper, length = 10);
-    yvals = []
-    for v in vals
-        x = copy(x0)
-        x[param] = v
-        push!(yvals, SSE(x; df = StateAnalysis) / (N * T))
-    end
+ζ_range = range(0., 5., 30);
+Δ_range = range(0., 5., 30);
+MSE_vals = [SSE(vcat(x0[1:2], [ζᶠ, Δ], x0[5:end])) / (N * T) for ζᶠ in ζ_range, Δ in Δ_range];
+surface(ζ_range, Δ_range, MSE_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (70, 30))
 
-    push!(plots, scatter(vals, yvals, xlabel = label, grid = false, linewidth = 2., legend = false, ylabel = "MSE"))
-
-end
-
-plot(plots...)
+δ_range = range(-2., 10., 50);
+MSE_vals = [SSE(vcat(x0[1:4], [δ], x0[6:end])) / (N * T) for δ in δ_range];
+scatter(δ_range, MSE_vals, xlabel = L"\delta", label = "MSE", grid = false)
 
 #==============================================================================================
 ESTIMATION
 ==============================================================================================#
-g(x, p) = SSE(x)
-f = OptimizationFunction(g, Optimization.AutoForwardDiff())
-
-# Set bounds
-lb = zeros(5 + N - 1 + T - 1 + 2);               # Initialize all bounds first
-lb[5] = -Inf;                                    # Inter
-lb[6: 5 + N - 1] .= -Inf;                        # SFEs
-lb[5 + N : 5 + N - 1 + T - 1] .= -Inf;           # TFEs
-
-ub = ones(5 + N - 1 + T - 1 + 2);                 # Initialize all bounds first
-ub[3] = Inf;                                      # αᶠ
-ub[4] = Inf;                                      # αᵈ
-ub[5] = Inf;                                      # Inter
-ub[6: 5 + N - 1] .= Inf;                          # SFEs
-ub[5 + N : 5 + N - 1 + T - 1] .= Inf;             # TFEs
-ub[end-1:end] .= Inf;                             # Comp adv params
-
-prob = OptimizationProblem(f, x0, lb = lb, ub = ub);
-sol = solve(prob, Optimization.LBFGS())
+res = EstimateProduction(x0);
+x_star, MSE_star = res[1], res[2];
 
 # Pack the solution and calculate TFP
-p = AuxParameters(sol[1], sol[2], sol[3], sol[4], sol[5], vcat(0., sol[6: 5 + N - 1]), vcat(0., sol[5 + N : 5 + N - 1 + T - 1]), sol[end - 1], sol[end]);
+p = AuxParametersConstructor(;ρ = x_star[1], θ = x_star[2], ζᶠ = x_star[3], Δ = x_star[4], δ = x_star[5], ξ = x_star[6: 4 + T], χ = x_star[5 + T : 3 + T + N], Inter = x_star[end])
 StateAnalysis[:, :Z] = Residual(p; df = StateAnalysis)[2]
 StateAnalysis[:, :L] = Residual(p; df = StateAnalysis)[3]
 
