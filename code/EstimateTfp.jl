@@ -32,7 +32,7 @@ How does s̄ change with the ζ's and the α's? Let's plot some surfaces.
 sbar_vals = [mean(s̄(AuxParametersConstructor(ζᶠ = ζᶠ, Δ = Δ))[1]) for ζᶠ in ζ_range, Δ in Δ_range];
 surface(ζ_range, Δ_range, sbar_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (35, 25))
 
-δ_range = range(-2., 10., 50); # REMARK: Below 2 and s̄ > 1 which leads to numerical instability so we will avoid that.
+δ_range = range(0., 10., 50); # REMARK: Below 2 and s̄ > 1 which leads to numerical instability so we will avoid that.
 sbar_vals = [mean(s̄(AuxParametersConstructor(δ = δ))[1]) for δ in δ_range];
 scatter(δ_range, sbar_vals, xlabel = L"\delta", grid = false, label = L"\bar s")
 
