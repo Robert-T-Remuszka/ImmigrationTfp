@@ -50,8 +50,6 @@ function s̄(p::AuxParameters; df::DataFrame = StateAnalysis)
     (; ζᶠ, ζᵈ, αᶠ, ρ) = p
     
     # Unpack wages
-    b = ρ / (1 - ρ)
-    #ζ = ((1 + ζᶠ * b)  / (1 + ζᵈ * b))^(1/b)
     wᵈ = df[:, :Wage_Domestic] ./  mean(df[:, :Wage_Domestic])
     wᶠ = df[:, :Wage_Foreign] ./ mean(df[:, :Wage_Foreign])
     w = wᵈ ./ wᶠ
@@ -122,22 +120,27 @@ Set up and call the box constrained optimization
 """
 function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
 
+    # Initialize
     N, T = length(unique(df[:,:statefip])) ,length(unique(df[:,:year]))
     options = Optim.Options(outer_iterations = 10000, iterations = 10000, show_trace = true, show_every = 10, g_tol = 1e-6);
-
-    # Set up the constraints
-    lb = zeros(5 + T - 1 + N - 1 + 1);                         # Initialize all bounds first
-    ub = Inf * ones(5 + T - 1 + N - 1 + 1);                    # Initialize all bounds first
+    lb = zeros(5 + T - 1 + N - 1 + 1);                         
+    ub = zeros(5 + T - 1 + N - 1 + 1);                        
 
     # Implment parameter-specific bounds
-    ub[1:2] .= 1.;                                           # ρ, θ < 1
-    ub[3] = 12.
-    ub[4] = 20.
-    #lb[5] = -2.;                                             # Don't want δ too low or s̄ > 1
-    #ub[5] = 20.
-    lb[6: 4 + T] .= -Inf;                                    # Unrestricted Time FEs
-    lb[5 + T : 3 + T + N] .= -Inf;                           # Unrestricted State FEs
-    lb[end] = -Inf;                                          # The intercept is unrestricted
+    lb[1:2] .= 0.                                            # ρ, θ > 0
+    ub[1:2] .= 1.                                            # ρ, θ < 1
+    lb[3]    = 0.                                            # ζᶠ > 0
+    ub[3]    = 12.                                              
+    lb[4]    = 0.                                            # Δ > 0
+    ub[4]    = 20.
+    lb[5]    = -2.                                           # Loosing nonnegativity on δ (if its -Inf the s̄ > 1 though, so not too loose)
+    ub[5]    = 20.
+    lb[6 : 4 + T] .= -Inf                                    # Unrestricted Time FEs
+    ub[6 : 4 + T] .=  Inf
+    lb[5 + T : 3 + T + N]  .= -Inf                            # Unrestricted State FEs
+    ub[5 + T : 3 + T + N]  .=  Inf
+    lb[end] = -Inf                                           # The intercept is unrestricted
+    ub[end] =  Inf
     
     # Objective and gradient
     f(x) = SSE(x; df = df)
