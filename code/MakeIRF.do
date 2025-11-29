@@ -7,10 +7,6 @@ use "${Data}/StateAnalysis.dta", clear
 * Define the sample
 loc samp inrange(year, 1994, 2021)
 
-* Local for looping through graph names for saving
-loc graphs Z_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990 L_Response_Iv1990 ///
-           Z_Response_Iv1990_F Wage_Foreign_Response_Iv1990_F Wage_Domestic_Response_Iv1990_F L_Response_Iv1990_F
-
 * Construct the Bartik instruments and left hand side variables - See Functions.do
 qui PreRegProcessing
 
@@ -34,7 +30,7 @@ errtype(robust) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
 *****************************/
 loc suffixes "Iv1990"
 loc depvars "Z Wage_Foreign Wage_Domestic L"
-loc ylabs "Z" "Foreign Born Wage" "Domestic Born Wage" "Task Aggregate"
+loc ylabs "Z" "Foreign Wage" "Domestic Wage" "Task Aggregate"
 loc counter = 1
 foreach v in `depvars' {
 
@@ -51,15 +47,21 @@ foreach v in `depvars' {
             loc ylab: word `counter' of "`ylabs'"
 
             * Impulse response
-            tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%50) lwidth(none) ///
+            tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%30) lwidth(none) ///
             xlab(`hmin'(1)`hmax', nogrid) ylab(, nogrid) ytitle("Response of `ylab' (%)") xtitle("Horizon") legend(off) ///
             yline(0, lc(black%50) lp(solid)) name(`v'_Response_`suffix')
+
+            * Save
+            graph export "${Graphs}/`v'_Response_`suffix'.pdf", replace name(`v'_Response_`suffix')
 
             * First stage diagnostics
             if inlist("`suffix'", "Iv1990") {
                 
                 graph bar F_Iv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(, nogrid labsize(small)) ///
                 yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(`v'_Response_`suffix'_F)
+
+                * Save
+                graph export "${Graphs}/`v'_Response_`suffix'_F.pdf", replace name(`v'_Response_`suffix'_F)
 
             }
 
@@ -70,10 +72,9 @@ foreach v in `depvars' {
 
 }
 
-foreach g in `graphs' {
-    
-    graph export "${Graphs}/`g'.pdf", replace name(`g')
+***** COMBINED GRAPHS
+graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990, rows(2) cols(2) name(SuffStat_Iv1990)
 
-}
-
+* Save
+graph export "${Graphs}/SuffStat_Iv1990.pdf", replace name(SuffStat_Iv1990)
 
