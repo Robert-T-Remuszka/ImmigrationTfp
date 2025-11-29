@@ -51,7 +51,7 @@ scatter(δ_range, MSE_vals, xlabel = L"\delta", label = "MSE", grid = false)
 #==============================================================================================
 ESTIMATION
 ==============================================================================================#
-res = EstimateProduction(x0);
+res = EstimateProduction(x0); # ρ = 0.91
 x_star, MSE_star = res[1], res[2];
 
 # Pack the solution and calculate TFP

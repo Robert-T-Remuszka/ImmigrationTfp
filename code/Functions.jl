@@ -89,15 +89,15 @@ function Residual(p::AuxParameters; df::DataFrame = StateAnalysis)
     # Calculate parts of the production function
     b = ρ/(1 - ρ)
     s = s̄(p; df = df)
-    Z = max.((s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[1].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^(1/b), 0.)
-    Z_level = max.((s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[2].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^1/b, 0.)
-    λ = clamp.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z.^b, 0. , 1.)
-    λ_level = clamp.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z_level.^b, 0. , 1.)
+    Z       = max.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[1].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
+    Z_level = max.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[2].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
+    λ       = clamp.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z, 0. , 1.)
+    λ_level = clamp.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z_level, 0. , 1.)
     L = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* D.^ρ).^(1/ρ)
     L_level = (λ_level.^(1 - ρ) .* (αᶠ * F_level).^ρ + (1 .- λ_level).^(1 - ρ) .* D_level.^ρ).^(1/ρ)
     
 
-    return log.(Y) - (Inter .+ TFE_Mat * ξ_conform  + SFE_Mat * χ_conform + θ * log.(K) + (1 - θ) * log.(Z .* L)), Z_level, L_level
+    return log.(Y) - (Inter .+ TFE_Mat * ξ_conform  + SFE_Mat * χ_conform + θ * log.(K) + (1 - θ) * log.(L) + ((1 - θ) / b) * log.(Z)), Z_level, L_level
 
 end
 
