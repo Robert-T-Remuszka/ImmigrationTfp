@@ -16,46 +16,47 @@ end;
 
 p0 = AuxParametersConstructor();
 Δ0 = 5.;
-δ0 = 1.;
-T = length(unique(StateAnalysis[:, :year]));
-N = length(unique(StateAnalysis[:, :statefip]));
-x0 = vcat(p0.ρ, p0.θ, p0.ζᶠ, Δ0, δ0, p0.ξ, p0.χ, p0.Inter);
+NS, NT  = length(unique(StateAnalysis[:, :statefip])), length(unique(StateAnalysis[:,:year]))
+x0 = vcat(p0.ρ, p0.θ, p0.ζᶠ, Δ0, p0.αᶠ, p0.αᵈ, p0.μ);
 #==============================================================================================
 VISUALIZATION
 1. Are there any restrictions we should place on s̄ for good behavior of the optimization?
 ==============================================================================================#
 #=
-How does s̄ change with the ζ's and the α's? Let's plot some surfaces.
+How does the cutoff change with the ζ's and the α's? Let's plot some surfaces.
 =#
 ζ_range = range(0., 20., 100);
 Δ_range = range(0., 10., 100);
-sbar_vals = [mean(s̄(AuxParametersConstructor(ζᶠ = ζᶠ, Δ = Δ))[1]) for ζᶠ in ζ_range, Δ in Δ_range];
+sbar_vals = [mean(T(AuxParametersConstructor(ζᶠ = ζᶠ, Δ = Δ))[1]) for ζᶠ in ζ_range, Δ in Δ_range];
 surface(ζ_range, Δ_range, sbar_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (35, 25))
 
-δ_range = range(0., 10., 50); # REMARK: Below 2 and s̄ > 1 which leads to numerical instability so we will avoid that.
-sbar_vals = [mean(s̄(AuxParametersConstructor(δ = δ))[1]) for δ in δ_range];
-scatter(δ_range, sbar_vals, xlabel = L"\delta", grid = false, label = L"\bar s")
+#=
+How about with the α's?
+=#
+α_range = range(1e-1, 10., 100);
+sbar_vals = [mean(T(AuxParametersConstructor(αᶠ = αᶠ, αᵈ = αᵈ))[1]) for αᶠ in α_range, αᵈ in α_range];
+surface(α_range, α_range, sbar_vals)
 
 #=
-What does the objective function looks like?
+What does the objective function look like?
 =#
-ζ_range = range(0., 5., 30);
+ζ_range = range(0., 1., 30);
 Δ_range = range(0., 5., 30);
-MSE_vals = [SSE(vcat(x0[1:2], [ζᶠ, Δ], x0[5:end])) / (N * T) for ζᶠ in ζ_range, Δ in Δ_range];
-surface(ζ_range, Δ_range, MSE_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (70, 30))
+MSE_vals = [SSE(vcat(x0[1:2], [ζᶠ, Δ], x0[5:end])) / (NS * NT) for ζᶠ in ζ_range, Δ in Δ_range];
+surface(ζ_range, Δ_range, MSE_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (30, 30))
 
-δ_range = range(-2., 10., 50);
-MSE_vals = [SSE(vcat(x0[1:4], [δ], x0[6:end])) / (N * T) for δ in δ_range];
-scatter(δ_range, MSE_vals, xlabel = L"\delta", label = "MSE", grid = false)
+α_range = range(1e-1, 3., 50);
+MSE_vals = [SSE(vcat(x0[1:4], [αᶠ, αᵈ], x0[end])) / (NS * NT) for αᶠ in α_range, αᵈ in α_range];
+surface(α_range, α_range, MSE_vals, label = "MSE", grid = false)
 
 #==============================================================================================
 ESTIMATION
 ==============================================================================================#
-res = EstimateProduction(x0); # ρ = 0.91
+res = EstimateProduction(x0);
 x_star, MSE_star = res[1], res[2];
 
 # Pack the solution and calculate TFP
-p = AuxParametersConstructor(;ρ = x_star[1], θ = x_star[2], ζᶠ = x_star[3], Δ = x_star[4], δ = x_star[5], ξ = x_star[6: 4 + T], χ = x_star[5 + T : 3 + T + N], Inter = x_star[end])
+p = AuxParametersConstructor(; ρ = x_star[1], θ = x_star[2], ζᶠ = x_star[3], Δ = x_star[4], αᶠ = x_star[5], αᵈ = x_star[6], μ = x_star[end])
 StateAnalysis[:, :Z] = Residual(p; df = StateAnalysis)[2]
 StateAnalysis[:, :L] = Residual(p; df = StateAnalysis)[3]
 

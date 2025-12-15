@@ -8,11 +8,10 @@ struct AuxParameters{T1 <: Real}
     θ::T1                                       # Capital share
     ζᶠ::T1                                      # Comp advantage - foreign
     ζᵈ::T1                                      # Comp advantage - domestic
-    αᶠ::T1                                      # Absolute advantage - foreign, normalize αᵈ = 1.
-    ξ::Vector{T1}                               # Time fixed effects - national task measure control
-    χ::Vector{T1}                               # State fixed effects
-    Inter::T1                                   # Intercept
-    
+    αᶠ::T1                                      # Absolute advantage - foreign
+    αᵈ::T1                                      # Absolute advantage - domestic
+    μ::T1                                       # Task measure
+
 end
 
 """
@@ -20,44 +19,35 @@ Constructor for the AuxParameters type.
     - df should be sorted, state then year.
     - It is assumed that domestic have comp advantage in certain tasks. This assumption is
     reflected in the parameterization ζᵈ = ζᶠ + Δ
-    - I will also normalize αᶠ < αᵈ = 1. The idea is that it is only the ratio of the alphas
-    that matters (task cutoff and CRS L). This will be paramterized by αᶠ = 1 / (1 + exp(δ)) where
-    δ is a real number.
 """
 function AuxParametersConstructor(;
     ρ::T1 = 0.5,
     θ::T1 = 0.3,
     ζᶠ::T1 = 1.5,
     Δ::T1 = 5.,
-    δ::T1 = 1., 
-    df::DataFrame = StateAnalysis,
-    T::Int = length(unique(df[:,:year])),
-    N::Int = length(unique(df[:,:statefip])),
-    ξ::Vector{T1} = zeros(T - 1),
-    χ::Vector{T1} = zeros(N -1),
-    Inter::T1 = 0.
+    αᶠ::T1 = 1.,
+    αᵈ::T1 = 2.,
+    μ::T1 = 10.
     ) where{T1 <: Real}                
     
-    return AuxParameters{T1}(ρ, θ, ζᶠ, ζᶠ + Δ, 1 / (1 + exp(δ)), ξ, χ, Inter)
+    return AuxParameters{T1}(ρ, θ, ζᶠ, ζᶠ + Δ, αᶠ, αᵈ, μ)
 
 end
 
 """
-Calculate the cutoff task. The notation, s̄ comes from a change of variables.
+Calculate the cutoff task.
 """
-function s̄(p::AuxParameters; df::DataFrame = StateAnalysis)
+function T(p::AuxParameters; df::DataFrame = StateAnalysis)
 
-    (; ζᶠ, ζᵈ, αᶠ, ρ) = p
+    (; ζᶠ, ζᵈ, αᶠ, αᵈ, μ) = p
     
-    # Unpack wages
-    wᵈ = df[:, :Wage_Domestic] ./  mean(df[:, :Wage_Domestic])
-    wᶠ = df[:, :Wage_Foreign] ./ mean(df[:, :Wage_Foreign])
-    w = wᵈ ./ wᶠ
-    w_level = w .* (mean(df[:, :Wage_Domestic]) ./ mean(df[:, :Wage_Foreign]))
-    s̄ = (w * αᶠ).^(1/(ζᵈ - ζᶠ))
-    s̄_level = (w_level * αᶠ).^(1/(ζᵈ - ζᶠ))
+    wᵈ, wᵈ_lvl = df[:, :Wage_Domestic] ./  std(df[:, :Wage_Domestic]), df[:, :Wage_Domestic]
+    wᶠ, wᶠ_lvl = df[:, :Wage_Foreign]  ./  std(df[:, :Wage_Foreign]),  df[:, :Wage_Foreign]
+    w, w_lvl   = wᵈ ./ wᶠ, wᵈ_lvl ./ wᶠ_lvl
+    α          = αᶠ ./ αᵈ
+    τ, τ_lvl   = (w * α).^(1/(ζᵈ - ζᶠ)), (w_lvl * α).^(1/(ζᵈ - ζᶠ))
     
-    return s̄, s̄_level
+    return clamp.(τ, 0. , μ), clamp.(τ_lvl, 0., μ)
 
 end
 
@@ -67,37 +57,21 @@ The residual function.
 function Residual(p::AuxParameters; df::DataFrame = StateAnalysis)
     
     # Unpacking
-    (; ρ, θ, ζᶠ, ζᵈ, αᶠ, ξ, χ, Inter) = p
-    K = df[:, :CapStock] ./ mean(df[:, :CapStock])
-    F = df[:, :Supply_Foreign] ./ mean(df[:, :Supply_Foreign])
-    D = df[:, :Supply_Domestic] ./ mean(df[:, :Supply_Domestic])
-    D_level = df[:, :Supply_Domestic]
-    F_level = df[:, :Supply_Foreign]
-    Y = df[:, :GDP] ./ mean(df[:, :GDP])
-    T = length(unique(df[:, :year]))
-    N = length(unique(df[:,:statefip]))
-    TFE_Mat = repeat(Matrix{Float64}(I, T, T), N)
-    ξ_conform = vcat(0., ξ)
-    χ_conform = vcat(0., χ)
-
-    # Set up the state fixed effects matrix
-    SFE_Mat = Matrix{Float64}(undef, 0, N)
-    for c in 1:N
-        SFE_Mat = vcat(SFE_Mat, [j == c ? 1. : 0. for i in 1:T, j in 1:N])
-    end
+    (; ρ, θ, ζᶠ, ζᵈ, αᶠ, αᵈ, μ) = p
+    K, K_lvl = df[:, :CapStock] ./ std(df[:, :CapStock]),               df[:, :CapStock]
+    F, F_lvl = df[:, :Supply_Foreign] ./ std(df[:, :Supply_Foreign]),   df[:, :Supply_Foreign]
+    D, D_lvl = df[:, :Supply_Domestic] ./ std(df[:, :Supply_Domestic]), df[:, :Supply_Domestic]
+    Y = df[:, :GDP] ./ std(df[:, :GDP])
 
     # Calculate parts of the production function
-    b = ρ/(1 - ρ)
-    s = s̄(p; df = df)
-    Z       = max.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[1].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
-    Z_level = max.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[2].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
-    λ       = clamp.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z, 0. , 1.)
-    λ_level = clamp.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z_level, 0. , 1.)
-    L = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* D.^ρ).^(1/ρ)
-    L_level = (λ_level.^(1 - ρ) .* (αᶠ * F_level).^ρ + (1 .- λ_level).^(1 - ρ) .* D_level.^ρ).^(1/ρ)
+    b        = ρ/(1 - ρ)
+    τ, τ_lvl = T(p; df = df)
+    Z, Z_lvl = (τ.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^(1/b), (τ_lvl.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ_lvl.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^(1/b)
+    λ, λ_lvl = clamp.((τ.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)) ./ Z.^b, 0. , 1.), clamp.((τ_lvl.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)) ./ Z_lvl.^b, 0. , 1.)
+    L, L_lvl = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* D.^ρ).^(1/ρ), (λ_lvl.^(1 - ρ) .* (αᶠ * F_lvl).^ρ + (1 .- λ_lvl).^(1 - ρ) .* D_lvl.^ρ).^(1/ρ)
     
 
-    return log.(Y) - (Inter .+ TFE_Mat * ξ_conform  + SFE_Mat * χ_conform + θ * log.(K) + (1 - θ) * log.(L) + ((1 - θ) / b) * log.(Z)), Z_level, L_level
+    return log.(Y) - (θ * log.(K) + (1 - θ) * log.(Z .* L)), Z_lvl, L_lvl
 
 end
 
@@ -106,9 +80,9 @@ The sum of squared errors for production function.
 """
 function SSE(x::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
 
-    ρ, θ, ζᶠ, Δ, δ, ξ, χ, Inter = x[1], x[2], x[3], x[4], x[5], x[6 : 4 + T], x[5 + T : 3 + T + N], x[end]
+    ρ, θ, ζᶠ, Δ, αᶠ, αᵈ, μ = x[1], x[2], x[3], x[4], x[5], x[6], x[7]
 
-    p = AuxParametersConstructor(ρ = ρ, θ = θ, ζᶠ = ζᶠ, Δ = Δ, δ = δ, ξ = ξ, χ = χ, Inter = Inter)
+    p = AuxParametersConstructor(ρ = ρ, θ = θ, ζᶠ = ζᶠ, Δ = Δ, αᶠ = αᶠ, αᵈ = αᵈ, μ = μ)
     vals = Residual(p; df = df)
 
     return dot(vals[1], vals[1])
@@ -121,26 +95,24 @@ Set up and call the box constrained optimization
 function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
 
     # Initialize
-    N, T = length(unique(df[:,:statefip])) ,length(unique(df[:,:year]))
+    NS, NT = length(unique(df[:,:statefip])) ,length(unique(df[:,:year]))
     options = Optim.Options(outer_iterations = 10000, iterations = 10000, show_trace = true, show_every = 10, g_tol = 1e-6);
-    lb = zeros(5 + T - 1 + N - 1 + 1);                         
-    ub = zeros(5 + T - 1 + N - 1 + 1);                        
+    lb = zeros(7);                         
+    ub = zeros(7);                        
 
     # Implment parameter-specific bounds
-    lb[1:2] .= 0.                                            # ρ, θ > 0
-    ub[1:2] .= 1.                                            # ρ, θ < 1
-    lb[3]    = 0.                                            # ζᶠ > 0
-    ub[3]    = 12.                                              
-    lb[4]    = 0.                                            # Δ > 0
-    ub[4]    = 20.
-    lb[5]    = -2.                                           # Loosing nonnegativity on δ (if its -Inf the s̄ > 1 though, so not too loose)
-    ub[5]    = 20.
-    lb[6 : 4 + T] .= -Inf                                    # Unrestricted Time FEs
-    ub[6 : 4 + T] .=  Inf
-    lb[5 + T : 3 + T + N]  .= -Inf                            # Unrestricted State FEs
-    ub[5 + T : 3 + T + N]  .=  Inf
-    lb[end] = -Inf                                           # The intercept is unrestricted
-    ub[end] =  Inf
+    lb[1:2] .= 0.                            # ρ, θ > 0
+    ub[1:2] .= 1.                            # ρ, θ < 1
+    lb[3]    = 0.                            # ζᶠ > 0
+    ub[3]    = 15.                                              
+    lb[4]    = 0.                            # Δ > 0
+    ub[4]    = 15.
+    lb[5]    = 0.                           # Loosing nonnegativity on δ (if its -Inf the s̄ > 1 though, so not too loose)
+    ub[5]    = 15.
+    lb[6]    = 0.
+    ub[6]    = 15.
+    lb[7]    = 0.                                 
+    ub[7]    = 15.
     
     # Objective and gradient
     f(x) = SSE(x; df = df)
@@ -149,8 +121,8 @@ function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where
     end
 
     # Call the optimizer
-    res = optimize(f, lb, ub, x0, Fminbox(NelderMead()), options)
-    MSE = res.minimum / (N * T)
+    res = optimize(f, lb, ub, x0, Fminbox(LBFGS()), options)
+    MSE = res.minimum / (NS * NT)
 
     return res.minimizer, MSE
 
