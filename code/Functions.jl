@@ -27,7 +27,7 @@ function AuxParametersConstructor(;
     Δ::T1 = 5.,
     αᶠ::T1 = 1.,
     αᵈ::T1 = 2.,
-    μ::T1 = 10.
+    μ::T1 = 1.
     ) where{T1 <: Real}                
     
     return AuxParameters{T1}(ρ, θ, ζᶠ, ζᶠ + Δ, αᶠ, αᵈ, μ)
@@ -58,17 +58,17 @@ function Residual(p::AuxParameters; df::DataFrame = StateAnalysis)
     
     # Unpacking
     (; ρ, θ, ζᶠ, ζᵈ, αᶠ, αᵈ, μ) = p
-    K, K_lvl = df[:, :CapStock] ./ std(df[:, :CapStock]),               df[:, :CapStock]
-    F, F_lvl = df[:, :Supply_Foreign] ./ std(df[:, :Supply_Foreign]),   df[:, :Supply_Foreign]
-    D, D_lvl = df[:, :Supply_Domestic] ./ std(df[:, :Supply_Domestic]), df[:, :Supply_Domestic]
+    K, K_lvl = df[:, :CapStock]        ./ std(df[:, :CapStock]),         df[:, :CapStock]
+    F, F_lvl = df[:, :Supply_Foreign]  ./ std(df[:, :Supply_Foreign]),   df[:, :Supply_Foreign]
+    D, D_lvl = df[:, :Supply_Domestic] ./ std(df[:, :Supply_Domestic]),  df[:, :Supply_Domestic]
     Y = df[:, :GDP] ./ std(df[:, :GDP])
 
     # Calculate parts of the production function
     b        = ρ/(1 - ρ)
     τ, τ_lvl = T(p; df = df)
-    Z, Z_lvl = (τ.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^(1/b), (τ_lvl.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ_lvl.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b)).^(1/b)
+    Z, Z_lvl = max.(τ.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.).^(1/b), max.(τ_lvl.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) + (μ^(1 + ζᵈ * b) .- τ_lvl.^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.).^(1/b)
     λ, λ_lvl = clamp.((τ.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)) ./ Z.^b, 0. , 1.), clamp.((τ_lvl.^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)) ./ Z_lvl.^b, 0. , 1.)
-    L, L_lvl = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* D.^ρ).^(1/ρ), (λ_lvl.^(1 - ρ) .* (αᶠ * F_lvl).^ρ + (1 .- λ_lvl).^(1 - ρ) .* D_lvl.^ρ).^(1/ρ)
+    L, L_lvl = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* (αᵈ * D).^ρ).^(1/ρ), (λ_lvl.^(1 - ρ) .* (αᶠ * F_lvl).^ρ + (1 .- λ_lvl).^(1 - ρ) .* (αᵈ * D_lvl).^ρ).^(1/ρ)
     
 
     return log.(Y) - (θ * log.(K) + (1 - θ) * log.(Z .* L)), Z_lvl, L_lvl
@@ -107,7 +107,7 @@ function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where
     ub[3]    = 15.                                              
     lb[4]    = 0.                            # Δ > 0
     ub[4]    = 15.
-    lb[5]    = 0.                           # Loosing nonnegativity on δ (if its -Inf the s̄ > 1 though, so not too loose)
+    lb[5]    = 0.
     ub[5]    = 15.
     lb[6]    = 0.
     ub[6]    = 15.
@@ -121,7 +121,7 @@ function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where
     end
 
     # Call the optimizer
-    res = optimize(f, lb, ub, x0, Fminbox(LBFGS()), options)
+    res = optimize(f, lb, ub, x0, Fminbox(NelderMead()), options)
     MSE = res.minimum / (NS * NT)
 
     return res.minimizer, MSE
