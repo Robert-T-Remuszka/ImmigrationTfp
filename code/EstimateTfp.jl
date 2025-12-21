@@ -63,10 +63,10 @@ p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = 
 @save "ProductionFunction.jld2" p_star;
 
 # Add estiamted objects from production function to data
-ComputeZ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).Z
-ComputeL(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).L
-Computeλ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).λ
-Compute𝒯(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).𝒯
+ComputeZ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).Z;
+ComputeL(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).L;
+Computeλ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).λ;
+Compute𝒯(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).𝒯;
 StateAnalysis = @chain StateAnalysis begin
    @mutate(
     Z = ComputeZ(Wage_Foreign, Wage_Domestic, Supply_Foreign, Supply_Domestic),
@@ -76,4 +76,5 @@ StateAnalysis = @chain StateAnalysis begin
    )  
 end
 
-CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), StateAnalysis[:,[:statefip, :year, :Z, :L, :lambda, :cutoff]])
+# Save the estimates
+CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), StateAnalysis[:,[:statefip, :year, :Z, :L, :lambda, :cutoff]]);
