@@ -14,6 +14,8 @@ frame mergethis {
     ren l L
     la var Z "Labor-augmenting productivity"
     la var L "Task aggregate"
+    la var lambda "Task productivity share"
+    la var cutoff "No-arbitrage task"
 
     tempfile mergethis
     save `mergethis', replace
