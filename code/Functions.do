@@ -47,9 +47,10 @@ program PreRegProcessing
         loc region = subinstr("`v'", "Supply_", "", 1)
 
         if !inlist("`region'", "Total", "Foreign", "Domestic", "US") {
-
+            
+            replace `v' = 0 if mi(`v')
             egen Supply_Agg_`region' = total(`v'), by(year)
-            bys statefip (year): gen fg_agg_`region' = asinh(Supply_Agg_`region') - asinh(Supply_Agg_`region'[_n-1])
+            bys statefip (year): gen fg_agg_`region' = log(Supply_Agg_`region') - log(Supply_Agg_`region'[_n-1])
 
         }
     }
