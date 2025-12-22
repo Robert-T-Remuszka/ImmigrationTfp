@@ -1,3 +1,7 @@
+using Pkg
+Pkg.activate(joinpath(@__DIR__, ".."))
+Pkg.instantiate()
+
 using DataFrames, StatFiles, LinearAlgebra, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
 using Plots, JLD2
 
@@ -17,7 +21,8 @@ StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))
 end;
 
 p0 = AuxParameters();
-x0 = [p0.ρ, p0.θ, p0.γᶠ, p0.Δ, p0.Γ, p0.αᶠ, p0.αᵈ, p0.ι];
+N, T = length(unique(StateAnalysis[:, :statefip])), length(unique(StateAnalysis[:,:year]))
+x0 = vcat(p0.ρ, p0.θ, p0.γᶠ, p0.Δ, p0.Γ, p0.αᶠ, p0.αᵈ, p0.ι, p0.SFE[2 : end], p0.TFE[2: end]); # Fixed effects have leading zeros
 
 #=======
 VISUALIZATION
@@ -31,7 +36,7 @@ production function.
 
 # ι
 ι_range  = range(-10., 10., 100);
-plot(ι_range, ι -> RSS(vcat(x0[1:7], ι)), grid = false, linewidth = 2., xlabel = L"\iota", legend = false)
+plot(ι_range, ι -> RSS(vcat(x0[1:7], ι, x0[9:end])), grid = false, linewidth = 2., xlabel = L"\iota", legend = false)
 
 # (γᶠ, Δ)
 γᶠ_range = range(1e-4, 20., 50);
@@ -53,13 +58,14 @@ plot(θ_range, θ -> RSS(vcat(x0[1], θ, x0[3:end])), grid = false, linewidth = 
 
 # (αᶠ, αᵈ)
 α_range = range(1., 5., 50);
-surface(α_range, α_range, (αᶠ, αᵈ) -> RSS(vcat(x0[1:5], αᶠ, αᵈ, x0[8])), xlabel = L"\alpha^F", ylabel = L"\alpha^D")
+surface(α_range, α_range, (αᶠ, αᵈ) -> RSS(vcat(x0[1:5], αᶠ, αᵈ, x0[8:end])), xlabel = L"\alpha^F", ylabel = L"\alpha^D")
 
 #=======
 ESTIMATION
 =======#
-x_star, MSE_star = EstimateProdFunc(x0)
-p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = x_star[4], Γ = x_star[5], αᶠ = x_star[6], αᵈ = x_star[7], ι = x_star[8]);
+x_star, MSE_star = EstimateProdFunc(x0);
+p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = x_star[4], Γ = x_star[5], αᶠ = x_star[6], αᵈ = x_star[7], ι = x_star[8],
+SFE = x_star[9 : 7 + N], TFE = x_star[8 + N : end]);
 @save "ProductionFunction.jld2" p_star;
 
 # Add estiamted objects from production function to data
