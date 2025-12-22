@@ -9,7 +9,7 @@ program PreRegProcessing
 
     * Generate foreign-born labor share and its growth rate
     gen f = Supply_Foreign
-    bys statefip (year): gen fg = (f - f[_n - 1]) / emp
+    bys statefip (year): gen fg = log(f / f[_n-1])
 
     * Calculate the shares
     qui ds Supply_*
@@ -49,7 +49,7 @@ program PreRegProcessing
         if !inlist("`region'", "Total", "Foreign", "Domestic", "US") {
 
             egen Supply_Agg_`region' = total(`v'), by(year)
-            bys statefip (year): gen fg_agg_`region' = (Supply_Agg_`region' - Supply_Agg_`region'[_n-1]) / emp_agg
+            bys statefip (year): gen fg_agg_`region' = asinh(Supply_Agg_`region') - asinh(Supply_Agg_`region'[_n-1])
 
         }
     }
@@ -74,10 +74,10 @@ program PreRegProcessing
     forvalues h = -9/9 { // LHS variables
         if `h' < 0 loc name = "L" + string(abs(`h'))
         if `h' >= 0 loc name = "F" + string(abs(`h'))
-        bys statefip (year): gen Lg_`name' = L[_n + `h']/L[_n - 1] - 1
-        bys statefip (year): gen Zg_`name' = Z[_n + `h']/Z[_n - 1] - 1
-        bys statefip (year): gen Wage_Foreign_`name' = Wage_Foreign[_n + `h']/Wage_Foreign[_n - 1] - 1
-        bys statefip (year): gen Wage_Domestic_`name' = Wage_Domestic[_n + `h']/Wage_Domestic[_n - 1] - 1
+        bys statefip (year): gen Lg_`name' = log(L[_n + `h']/L[_n - 1])
+        bys statefip (year): gen Zg_`name' = log(Z[_n + `h']/Z[_n - 1])
+        bys statefip (year): gen Wage_Foreign_`name' = log(Wage_Foreign[_n + `h'] / Wage_Foreign[_n - 1])
+        bys statefip (year): gen Wage_Domestic_`name' = log(Wage_Domestic[_n + `h'] / Wage_Domestic[_n - 1])
     }
 
     ren state statename
