@@ -1,4 +1,10 @@
-using DataFrames, StatFiles, LinearAlgebra, Plots, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
+using Pkg
+Pkg.activate(joinpath(@__DIR__, ".."))
+Pkg.instantiate()
+
+using DataFrames, StatFiles, LinearAlgebra, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
+using Plots, JLD2
+
 include("Globals.jl");
 include("Functions.jl");
 
@@ -14,50 +20,67 @@ StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))
     )
 end;
 
-p0 = AuxParametersConstructor();
-Δ0 = 5.;
-δ0 = 1.;
-T = length(unique(StateAnalysis[:, :year]));
-N = length(unique(StateAnalysis[:, :statefip]));
-x0 = vcat(p0.ρ, p0.θ, p0.ζᶠ, Δ0, δ0, p0.ξ, p0.χ, p0.Inter);
-#==============================================================================================
+p0 = AuxParameters();
+N, T = length(unique(StateAnalysis[:, :statefip])), length(unique(StateAnalysis[:,:year]))
+x0 = vcat(p0.ρ, p0.θ, p0.γᶠ, p0.Δ, p0.Γ, p0.αᶠ, p0.αᵈ, p0.ι, p0.SFE[2 : end], p0.TFE[2: end]); # Fixed effects have leading zeros
+
+#=======
 VISUALIZATION
-1. Are there any restrictions we should place on s̄ for good behavior of the optimization?
-==============================================================================================#
-#=
-How does s̄ change with the ζ's and the α's? Let's plot some surfaces.
+=======#
+
+#= RESIDUAL SUM OF SQUARES 
+
+Now look at how the residual sum of squares changes with the parameters of the 
+production function.
 =#
-ζ_range = range(0., 20., 100);
-Δ_range = range(0., 10., 100);
-sbar_vals = [mean(s̄(AuxParametersConstructor(ζᶠ = ζᶠ, Δ = Δ))[1]) for ζᶠ in ζ_range, Δ in Δ_range];
-surface(ζ_range, Δ_range, sbar_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (35, 25))
 
-δ_range = range(0., 10., 50); # REMARK: Below 2 and s̄ > 1 which leads to numerical instability so we will avoid that.
-sbar_vals = [mean(s̄(AuxParametersConstructor(δ = δ))[1]) for δ in δ_range];
-scatter(δ_range, sbar_vals, xlabel = L"\delta", grid = false, label = L"\bar s")
+# ι
+ι_range  = range(-10., 10., 100);
+plot(ι_range, ι -> RSS(vcat(x0[1:7], ι, x0[9:end])), grid = false, linewidth = 2., xlabel = L"\iota", legend = false)
 
-#=
-What does the objective function looks like?
-=#
-ζ_range = range(0., 5., 30);
-Δ_range = range(0., 5., 30);
-MSE_vals = [SSE(vcat(x0[1:2], [ζᶠ, Δ], x0[5:end])) / (N * T) for ζᶠ in ζ_range, Δ in Δ_range];
-surface(ζ_range, Δ_range, MSE_vals, xlabel = L"\zeta^F", ylabel = L"\Delta", camera = (70, 30))
+# (γᶠ, Δ)
+γᶠ_range = range(1e-4, 20., 50);
+Δ_range  = range(1e-4, 20., 50);
+surface(γᶠ_range, Δ_range, (γᶠ, Δ) -> RSS(vcat(x0[1:2], γᶠ, Δ, x0[5:end])), grid = false, linewidth = 2., xlabel = L"\Delta", legend = false,
+camera = (45, 30))
 
-δ_range = range(-2., 10., 50);
-MSE_vals = [SSE(vcat(x0[1:4], [δ], x0[6:end])) / (N * T) for δ in δ_range];
-scatter(δ_range, MSE_vals, xlabel = L"\delta", label = "MSE", grid = false)
+# Γ
+Γ_range = range(-5, 5, 100);
+plot(Γ_range, Γ -> RSS(vcat(x0[1:4], Γ, x0[6:end])), grid = false, linewidth = 2., xlabel = L"\Gamma", legend = false)
 
-#==============================================================================================
+# ρ
+ρ_range = range(1e-2, 1. - 1e-2, 100);
+plot(ρ_range, ρ -> RSS(vcat(ρ, x0[2:end])), grid = false, linewidth = 2., xlabel = L"\rho", legend = false)
+
+# θ
+θ_range = range(0., 1., 100);
+plot(θ_range, θ -> RSS(vcat(x0[1], θ, x0[3:end])), grid = false, linewidth = 2., xlabel = L"\theta", legend = false)
+
+# (αᶠ, αᵈ)
+α_range = range(1., 5., 50);
+surface(α_range, α_range, (αᶠ, αᵈ) -> RSS(vcat(x0[1:5], αᶠ, αᵈ, x0[8:end])), xlabel = L"\alpha^F", ylabel = L"\alpha^D")
+
+#=======
 ESTIMATION
-==============================================================================================#
-res = EstimateProduction(x0); # ρ = 0.91
-x_star, MSE_star = res[1], res[2];
+=======#
+x_star, MSE_star = EstimateProdFunc(x0);
+p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = x_star[4], Γ = x_star[5], αᶠ = x_star[6], αᵈ = x_star[7], ι = x_star[8],
+SFE = x_star[9 : 7 + N], TFE = x_star[8 + N : end]);
+@save "ProductionFunction.jld2" p_star;
 
-# Pack the solution and calculate TFP
-p = AuxParametersConstructor(;ρ = x_star[1], θ = x_star[2], ζᶠ = x_star[3], Δ = x_star[4], δ = x_star[5], ξ = x_star[6: 4 + T], χ = x_star[5 + T : 3 + T + N], Inter = x_star[end])
-StateAnalysis[:, :Z] = Residual(p; df = StateAnalysis)[2]
-StateAnalysis[:, :L] = Residual(p; df = StateAnalysis)[3]
+# Add estiamted objects from production function to data
+ComputeZ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).Z;
+ComputeL(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).L;
+Computeλ(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).λ;
+Compute𝒯(wᶠ, wᵈ, F, D) = ComputeReduced(wᶠ, wᵈ, F, D; p = p_star).𝒯;
+StateAnalysis = @chain StateAnalysis begin
+   @mutate(
+    Z = ComputeZ(Wage_Foreign, Wage_Domestic, Supply_Foreign, Supply_Domestic),
+    L = ComputeL(Wage_Foreign, Wage_Domestic, Supply_Foreign, Supply_Domestic),
+    lambda = Computeλ(Wage_Foreign, Wage_Domestic, Supply_Foreign, Supply_Domestic),
+    cutoff = Compute𝒯(Wage_Foreign, Wage_Domestic, Supply_Foreign, Supply_Domestic)
+   )  
+end
 
-# Save
-CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), StateAnalysis[:,[:statefip, :year, :Z, :L]])
+# Save the estimates
+CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), StateAnalysis[:,[:statefip, :year, :Z, :L, :lambda, :cutoff]]);

@@ -6,152 +6,147 @@ struct AuxParameters{T1 <: Real}
 
     ρ::T1                                       # CES parameter
     θ::T1                                       # Capital share
-    ζᶠ::T1                                      # Comp advantage - foreign
-    ζᵈ::T1                                      # Comp advantage - domestic
-    αᶠ::T1                                      # Absolute advantage - foreign, normalize αᵈ = 1.
-    ξ::Vector{T1}                               # Time fixed effects - national task measure control
-    χ::Vector{T1}                               # State fixed effects
-    Inter::T1                                   # Intercept
+    γᶠ::T1                                      # Comp advantage - foreign
+    Δ::T1                                       # γᵈ = γᶠ + Δ
+    Γ::T1                                       # Comp advantage - level shifter
+    αᶠ::T1                                      # Absolute advantage - foreign
+    αᵈ::T1                                      # Absolute advantage - domestic
+    ι::T1                                       # Intercept of production function
+    SFE::Vector{T1}                             # State fixed effects
+    TFE::Vector{T1}                             # Time fixed effects
     
 end
 
 """
 Constructor for the AuxParameters type.
-    - df should be sorted, state then year.
-    - It is assumed that domestic have comp advantage in certain tasks. This assumption is
-    reflected in the parameterization ζᵈ = ζᶠ + Δ
-    - I will also normalize αᶠ < αᵈ = 1. The idea is that it is only the ratio of the alphas
-    that matters (task cutoff and CRS L). This will be paramterized by αᶠ = 1 / (1 + exp(δ)) where
-    δ is a real number.
 """
-function AuxParametersConstructor(;
-    ρ::T1 = 0.5,
-    θ::T1 = 0.3,
-    ζᶠ::T1 = 1.5,
-    Δ::T1 = 5.,
-    δ::T1 = 1., 
-    df::DataFrame = StateAnalysis,
-    T::Int = length(unique(df[:,:year])),
-    N::Int = length(unique(df[:,:statefip])),
-    ξ::Vector{T1} = zeros(T - 1),
-    χ::Vector{T1} = zeros(N -1),
-    Inter::T1 = 0.
+function AuxParameters(;
+    ρ::T1  = 0.25,
+    θ::T1  = 0.50,
+    γᶠ::T1 = 1.,
+    Δ::T1  = 2.,
+    Γ::T1  = -1.,
+    αᶠ::T1 = 3.,
+    αᵈ::T1 = 3.,
+    ι::T1  = 5.,
+    df::DataFrame   = StateAnalysis,
+    N::Int          = length(unique(df[:, :statefip])),
+    T::Int          = length(unique(df[:, :year])),
+    SFE::Vector{T1} = zeros(N),
+    TFE::Vector{T1} = zeros(T)
     ) where{T1 <: Real}                
     
-    return AuxParameters{T1}(ρ, θ, ζᶠ, ζᶠ + Δ, 1 / (1 + exp(δ)), ξ, χ, Inter)
+    return AuxParameters{T1}(ρ, θ, γᶠ, Δ, Γ, αᶠ, αᵈ, ι, SFE, TFE)
 
 end
-
+ 
 """
-Calculate the cutoff task. The notation, s̄ comes from a change of variables.
+Compute parts of the reduced form production function for given parameters p.
 """
-function s̄(p::AuxParameters; df::DataFrame = StateAnalysis)
-
-    (; ζᶠ, ζᵈ, αᶠ, ρ) = p
+function ComputeReduced(wᶠ::T1, wᵈ::T1, F::T1, D::T1; p::AuxParameters) where {T1 <: Real}
     
-    # Unpack wages
-    wᵈ = df[:, :Wage_Domestic] ./  mean(df[:, :Wage_Domestic])
-    wᶠ = df[:, :Wage_Foreign] ./ mean(df[:, :Wage_Foreign])
+    (; ρ, γᶠ, Δ, Γ, αᶠ, αᵈ) = p
+
+    b, γᵈ  = ρ / (1 - ρ), γᶠ + Δ
+    bᶠ, bᵈ, b_gamma = γᶠ * b, γᵈ * b, Γ * b
     w = wᵈ ./ wᶠ
-    w_level = w .* (mean(df[:, :Wage_Domestic]) ./ mean(df[:, :Wage_Foreign]))
-    s̄ = (w * αᶠ).^(1/(ζᵈ - ζᶠ))
-    s̄_level = (w_level * αᶠ).^(1/(ζᵈ - ζᶠ))
-    
-    return s̄, s̄_level
+    α = αᶠ  / αᵈ
+    𝒯 = clamp((log(w * α) - Γ) / Δ, 0., 1.)
+    Z = max((1 / bᶠ) * (exp(bᶠ * 𝒯) - 1) + (1 / bᵈ) * exp(b_gamma) * (exp(bᵈ) - exp(bᵈ * 𝒯)), 0.)^(1 / b)
+    λ = clamp((1 / bᶠ) * (exp(bᶠ * 𝒯) - 1) / Z^b, 0. , 1.)
+    L = (λ^(1 - ρ) * (αᶠ * F)^ρ + (1 - λ)^(1 - ρ) * (αᵈ * D)^ρ)^(1/ρ)
+
+    return (; 𝒯, Z, λ, L)
 
 end
 
 """
-The residual function. 
+Compute residual sum of suares for a set of parameters p.
 """
-function Residual(p::AuxParameters; df::DataFrame = StateAnalysis)
+function RSS(x::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
     
-    # Unpacking
-    (; ρ, θ, ζᶠ, ζᵈ, αᶠ, ξ, χ, Inter) = p
-    K = df[:, :CapStock] ./ mean(df[:, :CapStock])
-    F = df[:, :Supply_Foreign] ./ mean(df[:, :Supply_Foreign])
-    D = df[:, :Supply_Domestic] ./ mean(df[:, :Supply_Domestic])
-    D_level = df[:, :Supply_Domestic]
-    F_level = df[:, :Supply_Foreign]
-    Y = df[:, :GDP] ./ mean(df[:, :GDP])
-    T = length(unique(df[:, :year]))
-    N = length(unique(df[:,:statefip]))
-    TFE_Mat = repeat(Matrix{Float64}(I, T, T), N)
-    ξ_conform = vcat(0., ξ)
-    χ_conform = vcat(0., χ)
+    # Ensure the data is sorted correctly - Matters for fixed effects
+    df_sort = @chain df begin
+        @arrange(statefip, year)
+    end
 
-    # Set up the state fixed effects matrix
+    N, T = length(unique(df_sort[:, :statefip])), length(unique(df_sort[:, :year]))
+
+    # Package the input vector into instance of AuxParameters. A leading zero is placed in front fixed effect vecors
+    # since I include an intercept.
+    p = AuxParameters(
+        ρ   = x[1],
+        θ   = x[2], 
+        γᶠ  = x[3], 
+        Δ   = x[4], 
+        Γ   = x[5], 
+        αᶠ  = x[6], 
+        αᵈ  = x[7], 
+        ι   = x[8], 
+        SFE = vcat(0., x[9 : 7 + N]),
+        TFE = vcat(0., x[8 + N : end]),
+        df  = df_sort
+    )
+
+    # An (NT × T) matrix which 'selects' the correct time fixed effect
+    TFE_Mat = repeat(Matrix{Float64}(I, T, T), N)
+
+    # An (NT × N) matrix which 'selects' the correct state fixed effect
     SFE_Mat = Matrix{Float64}(undef, 0, N)
     for c in 1:N
         SFE_Mat = vcat(SFE_Mat, [j == c ? 1. : 0. for i in 1:T, j in 1:N])
     end
-
-    # Calculate parts of the production function
-    b = ρ/(1 - ρ)
-    s = s̄(p; df = df)
-    Z       = max.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[1].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
-    Z_level = max.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b)  .+ (1 .- s[2].^(1 + ζᵈ * b)) ./ (1 + ζᵈ * b), 0.)
-    λ       = clamp.(s[1].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z, 0. , 1.)
-    λ_level = clamp.(s[2].^(1 + ζᶠ * b) ./ (1 + ζᶠ * b) ./ Z_level, 0. , 1.)
-    L = (λ.^(1 - ρ) .* (αᶠ * F).^ρ + (1 .- λ).^(1 - ρ) .* D.^ρ).^(1/ρ)
-    L_level = (λ_level.^(1 - ρ) .* (αᶠ * F_level).^ρ + (1 .- λ_level).^(1 - ρ) .* D_level.^ρ).^(1/ρ)
     
+    # Unpack some necessary parameters
+    (; ι, θ, SFE, TFE) = p
 
-    return log.(Y) - (Inter .+ TFE_Mat * ξ_conform  + SFE_Mat * χ_conform + θ * log.(K) + (1 - θ) * log.(L) + ((1 - θ) / b) * log.(Z)), Z_level, L_level
+    # Fetch some data for estimation
+    Y, K         = df_sort[:, :GDP], df_sort[:, :CapStock]
+    wᶠ, wᵈ, F, D = df_sort[:, :Wage_Foreign], df_sort[:, :Wage_Domestic], df_sort[:, :Supply_Foreign], df_sort[:, :Supply_Domestic]
+
+    # Broadcastisting ComputeReduced returns a vector of named tuples, so we need to broadcast the getproperty function
+    # getproperty is the basic function for which '.' notation is a shorthand, but . is also a shorthand for broadcasting!
+    Z, L = getproperty.(ComputeReduced.(wᶠ, wᵈ, F, D; p = p), :Z), getproperty.(ComputeReduced.(wᶠ, wᵈ, F, D; p = p), :L)
+    res  = log.(Y) - (ι .+  SFE_Mat * SFE +  TFE_Mat * TFE + θ * log.(K) + (1 - θ) * log.(Z .* L))
+
+    return dot(res, res)
 
 end
 
 """
-The sum of squared errors for production function.
+Estiamte production function by minimizing residual sum of squares. Initial guess is x0.
 """
-function SSE(x::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
+function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
 
-    ρ, θ, ζᶠ, Δ, δ, ξ, χ, Inter = x[1], x[2], x[3], x[4], x[5], x[6 : 4 + T], x[5 + T : 3 + T + N], x[end]
-
-    p = AuxParametersConstructor(ρ = ρ, θ = θ, ζᶠ = ζᶠ, Δ = Δ, δ = δ, ξ = ξ, χ = χ, Inter = Inter)
-    vals = Residual(p; df = df)
-
-    return dot(vals[1], vals[1])
-
-end
-
-"""
-Set up and call the box constrained optimization
-"""
-function EstimateProduction(x0::Vector{T1}; df::DataFrame = StateAnalysis) where{T1 <: Real}
-
-    # Initialize
-    N, T = length(unique(df[:,:statefip])) ,length(unique(df[:,:year]))
-    options = Optim.Options(outer_iterations = 10000, iterations = 10000, show_trace = true, show_every = 10, g_tol = 1e-6);
-    lb = zeros(5 + T - 1 + N - 1 + 1);                         
-    ub = zeros(5 + T - 1 + N - 1 + 1);                        
-
-    # Implment parameter-specific bounds
-    lb[1:2] .= 0.                                            # ρ, θ > 0
-    ub[1:2] .= 1.                                            # ρ, θ < 1
-    lb[3]    = 0.                                            # ζᶠ > 0
-    ub[3]    = 12.                                              
-    lb[4]    = 0.                                            # Δ > 0
-    ub[4]    = 20.
-    lb[5]    = -2.                                           # Loosing nonnegativity on δ (if its -Inf the s̄ > 1 though, so not too loose)
-    ub[5]    = 20.
-    lb[6 : 4 + T] .= -Inf                                    # Unrestricted Time FEs
-    ub[6 : 4 + T] .=  Inf
-    lb[5 + T : 3 + T + N]  .= -Inf                            # Unrestricted State FEs
-    ub[5 + T : 3 + T + N]  .=  Inf
-    lb[end] = -Inf                                           # The intercept is unrestricted
-    ub[end] =  Inf
+    obj(x) = RSS(x; df = df)
+    opts   = Optim.Options(show_trace = true, g_tol = 1e-6, show_every = 30)
+    N, T   = length(unique(df[:, :statefip])), length(unique(df[:, :year]))
     
-    # Objective and gradient
-    f(x) = SSE(x; df = df)
-    function g!(G, x)
-        ForwardDiff.gradient!(G, x -> SSE(x; df=df), x)
-    end
+    lb, ub = zeros(length(x0)), zeros(length(x0))
+    lb[1] = 1e-2          # ρ > 0
+    ub[1] = 1. - 1e-2     # ρ < 1
+    lb[2] = 1e-2          # θ > 0
+    ub[2] = 1. - 1e-2     # θ < 1
+    lb[3] = 1e-2          # γᶠ > 0
+    ub[3] = Inf
+    lb[4] = 1e-2          # Δ > 0
+    ub[4] =  Inf
+    lb[5] = -Inf          # Γ unbounded
+    ub[5] =  Inf
+    lb[6] =  1e-2         # αᶠ > 0
+    ub[6] =  Inf
+    lb[7] =  1e-2         # αᵈ > 0
+    ub[7] =  Inf
+    lb[8] = -Inf          # ι unbounded
+    ub[8] =  Inf
+    lb[9 : 7 + N] .= -Inf # SFE unbounded
+    ub[9 : 7 + N] .=  Inf
+    lb[8 + N : end] .= -Inf
+    ub[8 + N : end] .=  Inf
 
-    # Call the optimizer
-    res = optimize(f, lb, ub, x0, Fminbox(NelderMead()), options)
-    MSE = res.minimum / (N * T)
+    result = optimize(obj, lb, ub, x0, Fminbox(NelderMead()), opts)
+    MSE    =  result.minimum / (N * T)
 
-    return res.minimizer, MSE
+    return (; result.minimizer, MSE)
 
 end
