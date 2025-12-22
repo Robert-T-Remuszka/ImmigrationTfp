@@ -13,24 +13,26 @@ qui PreRegProcessing
 /*****************************
     Estimate Responses
 *****************************/
-EstimateIRF Zg , endogenous(fg l.fg) instruments(Bartik_1990 l.Bartik_1990) lagorderdepvar(1) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(robust) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Zg , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Foreign , endogenous(fg l.fg) instruments(Bartik_1990 l.Bartik_1990) lagorderdepvar(1) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(robust) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Domestic , endogenous(fg l.fg) instruments(Bartik_1990 l.Bartik_1990) lagorderdepvar(1) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(robust) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Lg , endogenous(fg l.fg) instruments(Bartik_1990 l.Bartik_1990) lagorderdepvar(1) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(robust) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Lg , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
 
 /*****************************
             PLOTS
 *****************************/
+set graphics off
+
 loc suffixes "Iv1990"
 loc depvars "Z Wage_Foreign Wage_Domestic L"
-loc ylabs "Z" "Foreign Wage" "Domestic Wage" "Task Aggregate"
+loc ylabs "Z" "w{superscript:F}" "w{superscript:D}" "L"
 loc counter = 1
 foreach v in `depvars' {
 
@@ -58,7 +60,7 @@ foreach v in `depvars' {
             if inlist("`suffix'", "Iv1990") {
                 
                 graph bar F_Iv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(, nogrid labsize(small)) ///
-                yline(10,lc(black%70) lp(dash)) legend(off) b1title("Horizon") ytitle("First Stage F") name(`v'_Response_`suffix'_F)
+                legend(off) b1title("Horizon") ytitle("First Stage F Stat (`ylab')") name(`v'_Response_`suffix'_F)
 
                 * Save
                 graph export "${Graphs}/`v'_Response_`suffix'_F.pdf", replace name(`v'_Response_`suffix'_F)
@@ -73,8 +75,17 @@ foreach v in `depvars' {
 }
 
 ***** COMBINED GRAPHS
-graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990, rows(2) cols(2) name(SuffStat_Iv1990)
+set graphics on
 
-* Save
-graph export "${Graphs}/SuffStat_Iv1990.pdf", replace name(SuffStat_Iv1990)
+* Responses
+graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990, ///
+rows(2) cols(2) name(Responses_Iv1990)
+
+graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
+
+* First Stages
+graph combine Z_Response_Iv1990_F L_Response_Iv1990_F Wage_Foreign_Response_Iv1990_F Wage_Domestic_Response_Iv1990_F, ///
+rows(2) cols(2) name(Responses_Iv1990_F)
+
+graph export "${Graphs}/Responses_Iv1990_F.pdf", replace name(Responses_Iv1990_F)
 

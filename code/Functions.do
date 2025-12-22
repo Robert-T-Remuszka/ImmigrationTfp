@@ -71,12 +71,11 @@ program PreRegProcessing
     drop Bartik_1990_* Bartik_L1_* Bartik_L2_*
 
     * Define left hand side variables
-    forvalues h = -9/9 { // LHS variables
-        if `h' < 0 loc name = "L" + string(abs(`h'))
-        if `h' >= 0 loc name = "F" + string(abs(`h'))
-        bys statefip (year): gen Lg_`name' = log(L[_n + `h']/L[_n - 1])
-        bys statefip (year): gen Zg_`name' = log(Z[_n + `h']/Z[_n - 1])
-        bys statefip (year): gen Wage_Foreign_`name' = log(Wage_Foreign[_n + `h'] / Wage_Foreign[_n - 1])
+    forvalues h = 0/9 { // LHS variables
+        loc name = "F" + string(abs(`h'))
+        bys statefip (year): gen Lg_`name' = log(L[_n + `h'] / L[_n - 1])
+        bys statefip (year): gen Zg_`name' = log(Z[_n + `h'] / Z[_n - 1])
+        bys statefip (year): gen Wage_Foreign_`name'  = log(Wage_Foreign[_n + `h'] / Wage_Foreign[_n - 1])
         bys statefip (year): gen Wage_Domestic_`name' = log(Wage_Domestic[_n + `h'] / Wage_Domestic[_n - 1])
     }
 
@@ -100,8 +99,8 @@ Estimate the reponse of y to the impulse given in the option impulse.
 *************************************************************************************************************************************************************/
 program EstimateIRF
 
-    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist) lagorderdepvar(integer 0) preperiod(integer 4) horizon(integer 9) absorb(varlist) ///
-    errtype(string) wt(string) framename(string) suffix(string) samp(string)] impulse(varname)
+    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(integer 0) ///
+    horizon(integer 9) absorb(varlist) errtype(string) wt(string) framename(string) suffix(string) samp(string)] impulse(varname)
 
     cap frame drop `framename'
     frame create `framename'
@@ -111,19 +110,19 @@ program EstimateIRF
         gen Se_`suffix'   = .
         if "`endogenous'" != "" gen F_`suffix'    = .
     }
+    
 
     * Loop through and estimate the LP at each horizon
-    forvalues h = -`preperiod'/`horizon' {
+    forvalues h = 0/`horizon' {
 
         * Need `horizon' local to call the correct dependent variables in the regression
-        if `h' < 0 loc horizon = "L" + string(abs(`h'))
-        if `h' >= 0 loc horizon = "F" + string(abs(`h'))
+        loc horizon = "F" + string(abs(`h'))
 
-        * If the user wants lags of the dependent variable included
-        loc depvarlags ""
-        if `lagorderdepvar' != 0 {
-            forvalues l = 1/`lagorderdepvar' {
-                loc depvarlags "`depvarlags' l`l'.`1'_`horizon'"
+        * Construct a local to store lags of the dependent variable
+        loc yvarlags ""
+        if `depvarlags' > 0 {   
+            forvalues l = 1/`depvarlags' { // Following Stock Watson (2018), Piger and Stockwell (2025)
+                loc yvarlags "`yvarlags' l`l'.d.`1'_`horizon'"
             }
         }
 
@@ -136,34 +135,21 @@ program EstimateIRF
         di "***********************************************************************************************************"
         
 
-        * Run the regression and save results in the provided frame - these regressions are not estimable for `h' = -1
-        if `h' != -1 { 
-            
-            qui ivreghdfe `1'_`horizon' (`endogenous' = `instruments') `exogenous' `depvarlags' [pw = `wt'] if `samp', vce(`errtype') absorb(`absorb')
+        * Run the regression and save results in the provided frame
+        qui ivreghdfe `1'_`horizon' (`endogenous' = `instruments') `exogenous' `yvarlags' [pw = `wt'] if `samp', vce(`errtype') absorb(`absorb')
 
-            * Record the results in the Estimates frame
-            frame `framename' {
+        * Record the results in the Estimates frame
+        frame `framename' {
 
-                insobs 1
-                replace h = `h' if _n == _N
-                replace Beta_`suffix' = _b[`impulse']       if _n == _N
-                replace Se_`suffix'   = _se[`impulse']      if _n == _N
-                if "`endogenous'" != "" replace F_`suffix'    = `e(widstat)' if _n == _N
-
-            }
+            insobs 1
+            replace h = `h' if _n == _N
+            replace Beta_`suffix' = _b[`impulse']       if _n == _N
+            replace Se_`suffix'   = _se[`impulse']      if _n == _N
+            if "`endogenous'" != "" replace F_`suffix'    = `e(widstat)' if _n == _N
 
         }
 
-        * Fill in the horizon -1 results
-        else {
-            frame `framename' {
-                insobs 1
-                replace h = `h' if _n == _N
-                replace Beta_`suffix' = 0   if _n == _N
-                replace Se_`suffix'   = 0   if _n == _N
-                if "`endogenous'" != "" replace F_`colname'    = .   if _n == _N
-            }
-        }
+        
         
     }
 
