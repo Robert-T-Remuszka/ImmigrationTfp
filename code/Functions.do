@@ -9,7 +9,7 @@ program PreRegProcessing
 
     * Generate foreign-born labor share and its growth rate
     gen f = Supply_Foreign
-    bys statefip (year): gen fg = log(f / f[_n-1])
+    bys statefip (year): gen fg = (f - f[_n-1]) / emp
 
     * Calculate the shares
     qui ds Supply_*
