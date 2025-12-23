@@ -13,20 +13,20 @@ qui PreRegProcessing
 /*****************************
     Estimate Responses
 *****************************/
-EstimateIRF Zg , endogenous(fg) instruments(Bartik_1990) depvarlags(2) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster statefip) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Zg , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(2) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster statefip) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(2) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster statefip) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Lg , endogenous(fg) instruments(Bartik_1990) depvarlags(2) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster statefip) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Lg , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(2) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster statefip) framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp')
 
 /*****************************
             PLOTS
