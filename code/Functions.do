@@ -78,6 +78,7 @@ program PreRegProcessing
         bys statefip (year): gen Zg_`name' = log(Z[_n + `h'] / Z[_n - 1])
         bys statefip (year): gen Wage_Foreign_`name'  = log(Wage_Foreign[_n + `h'] / Wage_Foreign[_n - 1])
         bys statefip (year): gen Wage_Domestic_`name' = log(Wage_Domestic[_n + `h'] / Wage_Domestic[_n - 1])
+        bys statefip (year): gen CapStock_`name'      = log(CapStock[_n + `h'] / CapStock[_n - 1])
     }
 
     ren state statename

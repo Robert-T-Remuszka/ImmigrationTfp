@@ -25,14 +25,17 @@ errtype(cluster year) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp'
 EstimateIRF Lg , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
 
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) exogenous(l.fg) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+errtype(cluster year) framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp')
+
 /*****************************
             PLOTS
 *****************************/
 set graphics off
 
 loc suffixes "Iv1990"
-loc depvars "Z Wage_Foreign Wage_Domestic L"
-loc ylabs "Z" "w{superscript:F}" "w{superscript:D}" "L"
+loc depvars "Z Wage_Foreign Wage_Domestic L CapStock"
+loc ylabs "Z" "w{sup:F}" "w{sup:D}" "L" "K"
 loc counter = 1
 foreach v in `depvars' {
 
@@ -47,12 +50,14 @@ foreach v in `depvars' {
             gen Beta_lower = Beta_`suffix' - 1.645 * Se_`suffix'
             
             loc ylab: word `counter' of "`ylabs'"
+            if "`v'" != "Z" loc yline "yline(0, lc(black%50) lp(solid))"
 
             * Impulse response
             tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%30) lwidth(none) ///
-            xlab(`hmin'(1)`hmax', nogrid) ylab(, nogrid) ytitle("Response of `ylab' (%)") xtitle("Horizon") legend(off) ///
-            yline(0, lc(black%50) lp(solid)) name(`v'_Response_`suffix')
-
+            xlab(`hmin'(1)`hmax', nogrid) ylab(, nogrid) xtitle("h") ///
+            `yline' name(`v'_Response_`suffix') ///
+            legend(order(1) pos(5) ring(0) label(1 "{&Delta}{sup:h}ln(`ylab')") region(lstyle(solid)) size(vsmall))
+            
             * Save
             graph export "${Graphs}/`v'_Response_`suffix'.pdf", replace name(`v'_Response_`suffix')
 
@@ -78,14 +83,14 @@ foreach v in `depvars' {
 set graphics on
 
 * Responses
-graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990, ///
-rows(2) cols(2) name(Responses_Iv1990)
+graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990 CapStock_Response_Iv1990, ///
+rows(3) cols(2) name(Responses_Iv1990)
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
 * First Stages
-graph combine Z_Response_Iv1990_F L_Response_Iv1990_F Wage_Foreign_Response_Iv1990_F Wage_Domestic_Response_Iv1990_F, ///
-rows(2) cols(2) name(Responses_Iv1990_F)
+graph combine Z_Response_Iv1990_F L_Response_Iv1990_F Wage_Foreign_Response_Iv1990_F Wage_Domestic_Response_Iv1990_F CapStock_Response_Iv1990_F, ///
+rows(3) cols(2) name(Responses_Iv1990_F)
 
 graph export "${Graphs}/Responses_Iv1990_F.pdf", replace name(Responses_Iv1990_F)
 
