@@ -11,12 +11,12 @@ include("ProdFunc.jl");
 # Read in the state level data
 StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))) begin
     @mutate(
-        CapStock = Float64.(CapStock) / exp(mean(log.(Float64.(CapStock)))),
-        Supply_Foreign = Float64.(Supply_Foreign) / exp(mean(log.(Float64.(Supply_Foreign)))), 
-        Supply_Domestic = Float64.(Supply_Domestic) / exp(mean(log.(Float64.(Supply_Domestic)))),
-        GDP = Float64.(GDP) / exp(mean(log.(Float64.(GDP)))),
-        Wage_Domestic = Float64.(Wage_Domestic) / exp(mean(log.(Float64.(Wage_Domestic)))),
-        Wage_Foreign = Float64.(Wage_Foreign) / exp(mean(log.(Float64.(Wage_Foreign))))
+        CapStock = Float64.(CapStock),
+        Supply_Foreign = Float64.(Supply_Foreign), 
+        Supply_Domestic = Float64.(Supply_Domestic),
+        GDP = Float64.(GDP),
+        Wage_Domestic = Float64.(Wage_Domestic),
+        Wage_Foreign = Float64.(Wage_Foreign)
     )
 end;
 

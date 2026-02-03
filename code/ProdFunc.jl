@@ -30,7 +30,7 @@ function AuxParameters(;
     αᶠ::T1 = 2.,
     αᵈ::T1 = 4.,
     ψ::T1  = 2.,
-    ι::T1  = -1.,
+    ι::T1  = 5.,
     df::DataFrame   = StateAnalysis,
     N::Int          = length(unique(df[:, :statefip])),
     T::Int          = length(unique(df[:, :year])),
@@ -95,16 +95,7 @@ function RSS(x::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
         df  = df_sort
     )
 
-    # An (NT × T) matrix which 'selects' the correct time fixed effect
-    #TFE_Mat = repeat(Matrix{Float64}(I, T, T), N)
-
-    # An (NT × N) matrix which 'selects' the correct state fixed effect
-    #SFE_Mat = Matrix{Float64}(undef, 0, N)
-    #for c in 1:N
-    #    SFE_Mat = vcat(SFE_Mat, [j == c ? 1. : 0. for i in 1:T, j in 1:N])
-    #end
-    
-    
+        
     # Unpack some necessary parameters
     (; ι, θ, ιₛ, ιₜ) = p
     state_indices = repeat(1:N, inner=T)  # [1,1,...,1, 2,2,...,2, ..., N,N,...,N]
@@ -146,10 +137,10 @@ function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {
     ub[1] = 0.99          # ρ < 1
     lb[2] = 1e-2          # θ > 0
     ub[2] = 1. - 1e-2     # θ < 1
-    lb[3] = 0.1           # γᶠ > 0
-    ub[3] = 2.0
-    lb[4] = 0.1          # Δ > 0
-    ub[4] =  2.
+    lb[3] = 1e-1          # γᶠ > 0
+    ub[3] = Inf
+    lb[4] = 1e-1          # Δ > 0
+    ub[4] = Inf
     lb[5] = -Inf          # Γ unbounded
     ub[5] =  Inf
     lb[6] =  0.05         # αᶠ > 0
