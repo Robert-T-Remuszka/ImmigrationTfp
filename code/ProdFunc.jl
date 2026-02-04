@@ -29,7 +29,7 @@ function AuxParameters(;
     Γ::T1  = -1.,
     αᶠ::T1 = 2.,
     αᵈ::T1 = 4.,
-    ψ::T1  = 2.,
+    ψ::T1  = 5.,
     ι::T1  = -4.,
     df::DataFrame   = StateAnalysis,
     N::Int          = length(unique(df[:, :statefip])),
@@ -51,7 +51,7 @@ function ComputeReduced(wᶠ::T1, wᵈ::T1, F::T1, D::T1; p::AuxParameters) wher
 
     b, γᵈ  = ρ / (1 - ρ), γᶠ + Δ
     bᶠ, bᵈ, b_gamma = γᶠ * b, γᵈ * b, Γ * b
-    χ      = γᶠ / Δ + 1 + exp(ψ)
+    χ      = γᵈ / Δ + exp(ψ)
     w = wᵈ / wᶠ
     α = αᶠ / αᵈ
     Z = max(
@@ -86,11 +86,10 @@ function RSS(x::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
         Δ   = x[4], 
         Γ   = x[5], 
         αᶠ  = x[6], 
-        αᵈ  = x[7], 
-        ψ   = x[8],
-        ι   = x[9], 
-        ιₛ = vcat(0., x[10 : 8 + N]),
-        ιₜ = vcat(0., x[9 + N : end]),
+        αᵈ  = x[7],
+        ι   = x[8], 
+        ιₛ = vcat(0., x[9 : 7 + N]),
+        ιₜ = vcat(0., x[8 + N : end]),
         df  = df_sort
     )
 
@@ -138,7 +137,7 @@ function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {
     ub[2] = 1. - 1e-2     # θ < 1
     lb[3] = 1e-3          # γᶠ > 0
     ub[3] = Inf
-    lb[4] = 1e-1          # Δ > 0
+    lb[4] = 1e-2          # Δ > 0
     ub[4] = Inf
     lb[5] = -Inf          # Γ unbounded
     ub[5] =  Inf
@@ -146,14 +145,12 @@ function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {
     ub[6] =  Inf
     lb[7] =  1e-2         # αᵈ > 0
     ub[7] =  Inf
-    lb[8] = -Inf          # ψ unbounded
+    lb[8] = -Inf          # ι unbounded
     ub[8] =  Inf
-    lb[9] = -Inf          # ι unbounded
-    ub[9] =  Inf
-    lb[10 : 8 + N] .= -Inf  # ιₛ unbounded
-    ub[10 : 8 + N] .=  Inf
-    lb[9 + N : end] .= -Inf # ιₜ unbounded
-    ub[9 + N : end] .=  Inf
+    lb[9 : 7 + N] .= -Inf  # ιₛ unbounded
+    ub[9 : 7 + N] .=  Inf
+    lb[8 + N : end] .= -Inf # ιₜ unbounded
+    ub[8 + N : end] .=  Inf
 
     result = optimize(obj, lb, ub, x0, Fminbox(NelderMead()), opts)
     MSE    =  result.minimum / (N * T)
