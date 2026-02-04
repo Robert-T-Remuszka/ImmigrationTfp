@@ -90,7 +90,7 @@ if !`skipIpums' {
                 if substr("`v'", 6, .) == "EastEu" loc origin "Russia and Eastern Europe"
                 if substr("`v'", 6, .) == "AsiaOther" loc origin "Asia Other"
                 
-                la var `v' "Migrant wage (2017 dollars), `origin'"
+                la var `v' "Migrant wage (2009 dollars), `origin'"
             }
 
             qui ds Supply_*
@@ -216,6 +216,7 @@ if !`skipIpums' {
 
     destring year, replace
 }
+
 /*********************************
     CLEAN AND MERGE STATE GDP
 **********************************/
@@ -233,10 +234,10 @@ if !`skipBea' {
         keep if description == "All industry total"
         drop if inlist(geoname, "United States", "Far West", "Rocky Mountain", "Southwest", "Southeast", "Plains", ///
         "Great Lakes", "Mideast", "New England")
-
+        
         * Extract the numerical part of the fips code + drop trailing zeros
         replace geofips = substr(geofips, 3, 2)
-
+        
         * Keep just the identifiers and the values - note units are millions of USD
         keep geofips geoname v*
         qui ds v*
@@ -289,7 +290,6 @@ if !`skipBea' {
             la var GDP_`yyyy' ""
 
         }
-        
 
         * Reshape long
         reshape long GDP_, i(geofips geoname) j(year)
@@ -307,20 +307,19 @@ if !`skipBea' {
     frame StateGdp63to97 {
         xframeappend StateGdp97to23, drop
         recast str2 statefip, force
-        replace GDP = GDP * 1e+6        // Units were millions
-        la var GDP "Real GDP, 2017 Dollars" // Still nominal at this point but will be deflated later
+        replace GDP = GDP
+        la var GDP "Real GDP, 2009 Dollars" // Still nominal at this point, but will be deflated later
         tempfile StateGdp
         save `StateGdp', replace
     }
 }
-
 
 /*********************************
     CLEAN AND MERGE EL-SHAGI AND YAMARIK
 **********************************/
 if !`skipEY' {
 
-    * El-Shagi and Yamarik cap stocks are real 2009 dollars. Let's reinflate
+    /* El-Shagi and Yamarik cap stocks are real 2009 dollars. Let's reinflate
     frame create InvDeflator 
     frame InvDeflator {
 
@@ -339,29 +338,27 @@ if !`skipEY' {
         replace pk = pk / `r(mean)'
         keep year pk
         label var pk ""
-    }
+    }*/
 
     frame create CapStocks
     frame CapStocks {
         
-        use "${CapStock}/state_capital_yesdata21.dta", clear
-
-        * Eyeballing the graph on the website, national stock should be about 21 trillion -> units here are in millions
-        replace cap = cap * 1e+6 
+        use "${CapStock}/state_capital_yesdata21.dta", clear 
         
         * Make statefip consistent with other data
         tostring fips, gen(statefip)
         drop fips
         replace statefip = "0" + statefip if strlen(statefip) == 1
         keep statefip year cap
+        ren cap CapStock
         
-        * Reinflate
+        /* Reinflate
         frlink m:1 year, frame(InvDeflator)
         frget pk, from(InvDeflator)
         drop InvDeflator
         frame drop InvDeflator
         gen CapStock = cap * pk
-        drop pk cap
+        drop pk cap*/
 
         tempfile capstock
         save `capstock', replace
@@ -422,12 +419,12 @@ if !`skipMerge' {
 
 * Label some stuff
 la var state ""
-la var CapStock "Real Capital Stock, 2017 Dollars"
+la var CapStock "Real Capital Stock, 2009 Dollars"
 la var Supply_US "Domestic-born quantity"
-la var Wage_US "Domestic-born wage (2017 Dollars)"
+la var Wage_US "Domestic-born wage, 2009 Dollars"
 
 * Convert to common base year (2017)
-frame create InvDeflator 
+/*frame create InvDeflator 
 frame InvDeflator {
 
     import delimited "${Data}/Price Deflators/InvestmentDeflator.csv", clear
@@ -442,7 +439,7 @@ frame InvDeflator {
 
     tempfile pk
     save `pk', replace
-}
+}*/
 
 frame create GdpDeflator
 frame GdpDeflator {
@@ -452,8 +449,9 @@ frame GdpDeflator {
     format daten %td
 
     gen year = yofd(daten)
-    gen p = a / 100
-    la var p ""
+    qui summ a if year == 2009
+    gen p = a / `r(mean)'
+    la var p "GDP Deflator, 2009 base"
     drop daten observation a
     keep if inrange(year, 1994, 2021)
 
@@ -462,7 +460,7 @@ frame GdpDeflator {
 
 }
 
-merge m:1 year using `pk', nogen
+//merge m:1 year using `pk', nogen
 merge m:1 year using `p', nogen
 
 qui ds Wage_*
@@ -472,8 +470,8 @@ foreach v in `r(varlist)' {
 }
 
 replace GDP = GDP / p
-replace CapStock = CapStock / pk
-drop p pk
+//replace CapStock = CapStock / pk
+drop p //pk
 
 /************************************
     CALCULATE FOREIGN AND DOMESTIC SUPPLIES/WAGES
