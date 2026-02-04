@@ -1,6 +1,6 @@
-#using Pkg
-#Pkg.activate(joinpath(@__DIR__, ".."))
-#Pkg.instantiate()
+using Pkg
+Pkg.activate(joinpath(@__DIR__, ".."))
+Pkg.instantiate()
 
 using DataFrames, StatFiles, LinearAlgebra, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
 using Plots, JLD2
@@ -65,7 +65,7 @@ ESTIMATION
 =======#
 x_star, MSE_star = EstimateProdFunc(x0);
 p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = x_star[4], Γ = x_star[5], αᶠ = x_star[6], αᵈ = x_star[7], 
-ψ = x_star[8], ι = x_star[9], ιₛ = x_star[10 : 8 + N], ιₜ = x_star[9 + N : end]);
+ψ = x_star[8], ι = x_star[9], ιₛ = vcat(0., x_star[10 : 8 + N]), ιₜ = vcat(0., x_star[9 + N : end]);
 @save "ProductionFunction.jld2" p_star;
 
 # Add estimated objects from production function to data
