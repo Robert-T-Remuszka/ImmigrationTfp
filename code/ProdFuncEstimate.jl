@@ -21,7 +21,7 @@ StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))
 end;
 
 p0 = AuxParameters();
-N, T = length(unique(StateAnalysis[:, :statefip])), length(unique(StateAnalysis[:,:year]))
+N, T = length(unique(StateAnalysis[:, :statefip])), length(unique(StateAnalysis[:,:year]));
 x0 = vcat(p0.ρ, p0.θ, p0.γᶠ, p0.Δ, p0.Γ, p0.αᶠ, p0.αᵈ, p0.ψ, p0.ι, p0.ιₛ[2 : end], p0.ιₜ[2: end]); # Fixed effects have leading zeros
 
 #=======
@@ -39,10 +39,9 @@ production function.
 plot(ι_range, ι -> RSS(vcat(x0[1:8], ι, x0[10:end])), grid = false, linewidth = 2., xlabel = L"\iota", legend = false)
 
 # (γᶠ, Δ)
-γᶠ_range = range(0.3, 2., 20);
-Δ_range  = range(0.3, 2., 20);
-heatmap(γᶠ_range, Δ_range, (γᶠ, Δ) -> RSS(vcat(x0[1:2], γᶠ, Δ, x0[5:end])), grid = false, linewidth = 2., xlabel = L"\Delta", 
-legend = false, ylabel = L"\gamma^F", c=:viridis)
+γᶠ_range = range(1e-3, 2., 20);
+Δ_range  = range(1e-1, 2., 20);
+heatmap(γᶠ_range, Δ_range, (γᶠ, Δ) -> RSS(vcat(x0[1:2], γᶠ, Δ, x0[5:end])), grid = false, linewidth = 2., xlabel = L"\Delta", ylabel = L"\gamma^F", c=:viridis)
 
 # Γ
 Γ_range = range(-5, 5, 100);
@@ -57,7 +56,7 @@ plot(ρ_range, ρ -> RSS(vcat(ρ, x0[2:end])), grid = false, linewidth = 2., xla
 plot(θ_range, θ -> RSS(vcat(x0[1], θ, x0[3:end])), grid = false, linewidth = 2., xlabel = L"\theta", legend = false)
 
 # (αᶠ, αᵈ)
-α_range = range(0.05, 4., 20);
+α_range = range(1e-4, 10., 20);
 heatmap(α_range, α_range, (αᶠ, αᵈ) -> RSS(vcat(x0[1:5], αᶠ, αᵈ, x0[8:end])), xlabel = L"\alpha^F", ylabel = L"\alpha^D")
 
 #=======
@@ -65,7 +64,7 @@ ESTIMATION
 =======#
 x_star, MSE_star = EstimateProdFunc(x0);
 p_star  = AuxParameters(ρ = x_star[1], θ = x_star[2], γᶠ = x_star[3], Δ = x_star[4], Γ = x_star[5], αᶠ = x_star[6], αᵈ = x_star[7], 
-ψ = x_star[8], ι = x_star[9], ιₛ = vcat(0., x_star[10 : 8 + N]), ιₜ = vcat(0., x_star[9 + N : end]);
+ψ = x_star[8], ι = x_star[9], ιₛ = vcat(0., x_star[10 : 8 + N]), ιₜ = vcat(0., x_star[9 + N : end]));
 @save "ProductionFunction.jld2" p_star;
 
 # Add estimated objects from production function to data

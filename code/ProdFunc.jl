@@ -22,7 +22,7 @@ end
 Constructor for the AuxParameters type.
 """
 function AuxParameters(;
-    ρ::T1  = 0.50,
+    ρ::T1  = 0.60,
     θ::T1  = 0.50,
     γᶠ::T1 = 1.,
     Δ::T1  = 1.,
@@ -30,12 +30,12 @@ function AuxParameters(;
     αᶠ::T1 = 2.,
     αᵈ::T1 = 4.,
     ψ::T1  = 2.,
-    ι::T1  = 5.,
+    ι::T1  = -4.,
     df::DataFrame   = StateAnalysis,
     N::Int          = length(unique(df[:, :statefip])),
     T::Int          = length(unique(df[:, :year])),
-    ιₛ::Vector{T1} = zeros(N),
-    ιₜ::Vector{T1} = zeros(T)
+    ιₛ::Vector{T1} = ones(N),
+    ιₜ::Vector{T1} = ones(T)
     ) where{T1 <: Real}                
     
     return AuxParameters{T1}(ρ, θ, γᶠ, Δ, Γ, αᶠ, αᵈ, ψ, ι, ιₛ, ιₜ)
@@ -57,8 +57,7 @@ function ComputeReduced(wᶠ::T1, wᵈ::T1, F::T1, D::T1; p::AuxParameters) wher
     Z = max(
         (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * (Δ * χ)/(Δ * χ - γᵈ) - χ/(χ - 1)) + 
         exp(b_gamma) * (1/bᵈ) * (exp(bᵈ) - (α * w / exp(Γ))^(bᵈ / Δ) * (Δ * χ)/(Δ * χ - γᵈ))
-        , 0.01
-        )^(1 / b)
+        , 1e-4)^(1 / b)
     λ = clamp( (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * (Δ * χ)/(Δ * χ - γᵈ) - χ/(χ - 1)) / Z^b, 0. , 1.)
     L = (λ^(1 - ρ) * (αᶠ * F)^ρ + (1 - λ)^(1 - ρ) * (αᵈ * D)^ρ)^(1/ρ)
 
@@ -137,15 +136,15 @@ function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {
     ub[1] = 0.99          # ρ < 1
     lb[2] = 1e-2          # θ > 0
     ub[2] = 1. - 1e-2     # θ < 1
-    lb[3] = 1e-1          # γᶠ > 0
+    lb[3] = 1e-3          # γᶠ > 0
     ub[3] = Inf
     lb[4] = 1e-1          # Δ > 0
     ub[4] = Inf
     lb[5] = -Inf          # Γ unbounded
     ub[5] =  Inf
-    lb[6] =  0.05         # αᶠ > 0
+    lb[6] =  1e-2         # αᶠ > 0
     ub[6] =  Inf
-    lb[7] =  0.05         # αᵈ > 0
+    lb[7] =  1e-2         # αᵈ > 0
     ub[7] =  Inf
     lb[8] = -Inf          # ψ unbounded
     ub[8] =  Inf
