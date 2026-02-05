@@ -50,11 +50,12 @@ foreach v in `depvars' {
             gen Beta_lower = Beta_`suffix' - 1.645 * Se_`suffix'
             
             loc ylab: word `counter' of "`ylabs'"
+            if "`v'" != "Z" loc yline "yline(0, lc(black%50) lp(solid))"
 
             * Impulse response
             tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%30) lwidth(none) ///
             xlab(`hmin'(1)`hmax', nogrid) ytitle("{&Delta}{sup:h}ln(`ylab')", size(large)) ylab(, nogrid) xtitle("h") legend(off) ///
-            yline(0, lc(black%50) lp(solid)) name(`v'_Response_`suffix') 
+            `yline' name(`v'_Response_`suffix') 
             
             * Save
             graph export "${Graphs}/`v'_Response_`suffix'.pdf", replace name(`v'_Response_`suffix')
