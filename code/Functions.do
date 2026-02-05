@@ -85,6 +85,9 @@ program PreRegProcessing
     encode statefip, gen(state)
     xtset state year
 
+    * Save this file for use in Julia when computing Rotemberg weights
+    save "${Data}/StateAnalysisRegReady.dta", replace
+    
 end
 
 /***********************************************************************************************************************************************************
