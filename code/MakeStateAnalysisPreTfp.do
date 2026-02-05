@@ -60,7 +60,7 @@ if !`skipIpums' {
             }
 
             * Aggregate up to the state x year x immigrant group level
-            collapse (mean) Wage = incwage (count) Supply = incwage [fw = perwt], by(statefip year ImmigrantGroup)
+            collapse (mean) Wage = incwage (rawsum) Supply = perwt [pw = perwt], by(statefip year ImmigrantGroup)
 
             * Reshape wide - some groups have short enough names that we can use those as their stubs
             gen abbr = "_CaAuNz" if ImmigrantGroup == "Canada-Australia-New Zealand"
@@ -165,7 +165,7 @@ if !`skipIpums' {
             }
 
             * Aggregate up to the state x year x immigrant group level
-            collapse (mean) Wage = incwage (count) Supply = incwage [pw = asecwt], by(statefip year ImmigrantGroup)
+            collapse (mean) Wage = incwage (rawsum) Supply = asecwt [pw = asecwt], by(statefip year ImmigrantGroup)
 
             * Reshape wide - some groups have short enough names that we can use those as their stubs
             gen abbr = "_CaAuNz" if ImmigrantGroup == "Canada-Australia-New Zealand"
