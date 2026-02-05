@@ -1,6 +1,6 @@
-using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."))
-Pkg.instantiate()
+#using Pkg
+#Pkg.activate(joinpath(@__DIR__, ".."))
+#Pkg.instantiate()
 
 using DataFrames, StatFiles, LinearAlgebra, LaTeXStrings, CSV, TidierData, Statistics, Optim, ForwardDiff
 using Plots, JLD2
@@ -39,8 +39,8 @@ production function.
 plot(ι_range, ι -> RSS(vcat(x0[1:7], ι, x0[9:end])), grid = false, linewidth = 2., xlabel = L"\iota", legend = false)
 
 # (γᶠ, Δ)
-γᶠ_range = range(1e-3, 2., 20);
-Δ_range  = range(1e-2, 2., 20);
+γᶠ_range = range(1e-4, 5., 20);
+Δ_range  = range(1e-1, 5., 20);
 heatmap(γᶠ_range, Δ_range, (γᶠ, Δ) -> RSS(vcat(x0[1:2], γᶠ, Δ, x0[5:end])), grid = false, linewidth = 2., xlabel = L"\Delta", ylabel = L"\gamma^F", c=:viridis)
 
 # Γ
@@ -48,7 +48,7 @@ heatmap(γᶠ_range, Δ_range, (γᶠ, Δ) -> RSS(vcat(x0[1:2], γᶠ, Δ, x0[5:
 plot(Γ_range, Γ -> RSS(vcat(x0[1:4], Γ, x0[6:end])), grid = false, linewidth = 2., xlabel = L"\Gamma", legend = false)
 
 # ρ
-ρ_range = range(0.1, 0.99, 100);
+ρ_range = range(0.1, 0.3, 100);
 plot(ρ_range, ρ -> RSS(vcat(ρ, x0[2:end])), grid = false, linewidth = 2., xlabel = L"\rho", legend = false)
 
 # θ
@@ -56,7 +56,7 @@ plot(ρ_range, ρ -> RSS(vcat(ρ, x0[2:end])), grid = false, linewidth = 2., xla
 plot(θ_range, θ -> RSS(vcat(x0[1], θ, x0[3:end])), grid = false, linewidth = 2., xlabel = L"\theta", legend = false)
 
 # (αᶠ, αᵈ)
-α_range = range(1e-4, 20., 50);
+α_range = range(1e-4, 10., 50);
 heatmap(α_range, α_range, (αᶠ, αᵈ) -> RSS(vcat(x0[1:5], αᶠ, αᵈ, x0[8:end])), xlabel = L"\alpha^F", ylabel = L"\alpha^D")
 
 #=======

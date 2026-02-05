@@ -11,7 +11,6 @@ struct AuxParameters{T1 <: Real}
     Γ::T1                                       # Comp advantage - level shifter
     αᶠ::T1                                      # Absolute advantage - foreign
     αᵈ::T1                                      # Absolute advantage - domestic
-    ψ::T1                                       # Parameterization for χ: χ > γᵈ/(γᵈ - γᶠ) ⟺ χ > (γᶠ + Δ)/Δ ⟺ χ = γᶠ/Δ + 1 + exp(ψ)
     ι::T1                                       # Intercept of production function
     ιₛ::Vector{T1}                               # State fixed effects
     ιₜ::Vector{T1}                               # Time fixed effects
@@ -22,14 +21,13 @@ end
 Constructor for the AuxParameters type.
 """
 function AuxParameters(;
-    ρ::T1  = 0.60,
+    ρ::T1  = 0.20,
     θ::T1  = 0.50,
-    γᶠ::T1 = 1.,
-    Δ::T1  = 1.,
-    Γ::T1  = -1.,
+    γᶠ::T1 = 2.,
+    Δ::T1  = 4.,
+    Γ::T1  = -3.,
     αᶠ::T1 = 2.,
     αᵈ::T1 = 4.,
-    ψ::T1  = 5.,
     ι::T1  = -4.,
     df::DataFrame   = StateAnalysis,
     N::Int          = length(unique(df[:, :statefip])),
@@ -38,7 +36,7 @@ function AuxParameters(;
     ιₜ::Vector{T1} = ones(T)
     ) where{T1 <: Real}                
     
-    return AuxParameters{T1}(ρ, θ, γᶠ, Δ, Γ, αᶠ, αᵈ, ψ, ι, ιₛ, ιₜ)
+    return AuxParameters{T1}(ρ, θ, γᶠ, Δ, Γ, αᶠ, αᵈ, ι, ιₛ, ιₜ)
 
 end
  
@@ -47,18 +45,19 @@ Compute parts of the reduced form production function for given parameters p.
 """
 function ComputeReduced(wᶠ::T1, wᵈ::T1, F::T1, D::T1; p::AuxParameters) where {T1 <: Real}
     
-    (; ρ, γᶠ, Δ, Γ, αᶠ, αᵈ, ψ) = p
+    (; ρ, γᶠ, Δ, Γ, αᶠ, αᵈ) = p
 
     b, γᵈ  = ρ / (1 - ρ), γᶠ + Δ
     bᶠ, bᵈ, b_gamma = γᶠ * b, γᵈ * b, Γ * b
-    χ      = γᵈ / Δ + exp(ψ)
+    Eω_high = ((1 - ρ) * Δ) / ((1 - ρ) * Δ - ρ * γᵈ)  # E[ω^(ργᵈ/((1-ρ)Δ))]
+    Eω_low = (1 - ρ) / (1 - 2ρ)                        # E[ω^(ρ/(1-ρ))]
     w = wᵈ / wᶠ
     α = αᶠ / αᵈ
     Z = max(
-        (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * (Δ * χ)/(Δ * χ - γᵈ) - χ/(χ - 1)) + 
-        exp(b_gamma) * (1/bᵈ) * (exp(bᵈ) - (α * w / exp(Γ))^(bᵈ / Δ) * (Δ * χ)/(Δ * χ - γᵈ))
+        (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * Eω_high - Eω_low) + 
+        exp(b_gamma) * (1/bᵈ) * (exp(bᵈ) - (α * w / exp(Γ))^(bᵈ / Δ) * Eω_high)
         , 1e-4)^(1 / b)
-    λ = clamp( (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * (Δ * χ)/(Δ * χ - γᵈ) - χ/(χ - 1)) / Z^b, 0. , 1.)
+    λ = clamp( (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * Eω_high - Eω_low) / Z^b, 0. , 1.)
     L = (λ^(1 - ρ) * (αᶠ * F)^ρ + (1 - λ)^(1 - ρ) * (αᵈ * D)^ρ)^(1/ρ)
 
     return (; Z, λ, L)
@@ -132,12 +131,12 @@ function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {
     
     lb, ub = zeros(length(x0)), zeros(length(x0))
     lb[1] = 0.01          # ρ > 0
-    ub[1] = 0.99          # ρ < 1
+    ub[1] = 0.49          # ρ < 1/2 ensures finite moments
     lb[2] = 1e-2          # θ > 0
     ub[2] = 1. - 1e-2     # θ < 1
     lb[3] = 1e-3          # γᶠ > 0
     ub[3] = Inf
-    lb[4] = 1e-2          # Δ > 0
+    lb[4] = 1e-1          # Δ > 0
     ub[4] = Inf
     lb[5] = -Inf          # Γ unbounded
     ub[5] =  Inf
