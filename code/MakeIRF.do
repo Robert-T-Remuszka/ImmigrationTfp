@@ -13,19 +13,19 @@ qui PreRegProcessing
 /*****************************
     Estimate Responses
 *****************************/
-EstimateIRF Zg , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF Lg , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(1) absorb(year statefip) wt(emp) impulse(fg) ///
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
 errtype(cluster year) framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp')
 
 /*****************************
@@ -50,7 +50,7 @@ foreach v in `depvars' {
             gen Beta_lower = Beta_`suffix' - 1.645 * Se_`suffix'
             
             loc ylab: word `counter' of "`ylabs'"
-            if "`v'" != "Z" loc yline "yline(0, lc(black%50) lp(solid))"
+            loc yline "yline(0, lc(black%50) lp(solid))"
 
             * Impulse response
             tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%30) lwidth(none) ///
@@ -84,6 +84,7 @@ set graphics on
 * Responses
 graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990 CapStock_Response_Iv1990, ///
 rows(3) cols(2) name(Responses_Iv1990)
+rtr
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
