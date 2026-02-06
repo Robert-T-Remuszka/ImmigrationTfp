@@ -71,16 +71,7 @@ program PreRegProcessing
     egen Bartik_L2   = rowtotal(Bartik_L2_*),   missing
     drop Bartik_1990_* Bartik_L1_* Bartik_L2_*
 
-    * Define left hand side variables
-    forvalues h = 0/9 { // LHS variables
-        loc name = "F" + string(abs(`h'))
-        bys statefip (year): gen Lg_`name' = log(L[_n + `h'] / L[_n - 1])
-        bys statefip (year): gen Zg_`name' = log(Z[_n + `h'] / Z[_n - 1])
-        bys statefip (year): gen Wage_Foreign_`name'  = log(Wage_Foreign[_n + `h'] / Wage_Foreign[_n - 1])
-        bys statefip (year): gen Wage_Domestic_`name' = log(Wage_Domestic[_n + `h'] / Wage_Domestic[_n - 1])
-        bys statefip (year): gen CapStock_`name'      = log(CapStock[_n + `h'] / CapStock[_n - 1])
-    }
-
+    
     ren state statename
     encode statefip, gen(state)
     xtset state year
@@ -107,13 +98,20 @@ program EstimateIRF
     syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(integer 0) ///
     horizon(integer 9) absorb(varlist) errtype(string) wt(string) framename(string) suffix(string) samp(string)] impulse(varname)
 
+    * Create a place to store the results
     cap frame drop `framename'
     frame create `framename'
     frame `framename' {
         gen h = .
         gen Beta_`suffix' = .
         gen Se_`suffix'   = .
-        if "`endogenous'" != "" gen F_`suffix'    = .
+        if "`endogenous'" != "" gen F_`suffix' = .
+    }
+
+    * Create long differences of the dependent variable
+    forvalues h = 0/9 {
+        loc operator = "Delta`h'"
+        bys statefip (year): gen `operator'`1' = log(`1'[_n + `h'] / `1'[_n - 1])
     }
     
 
@@ -123,13 +121,8 @@ program EstimateIRF
         * Need `horizon' local to call the correct dependent variables in the regression
         loc horizon = "F" + string(abs(`h'))
 
-        * Construct a local to store lags of the dependent variable
-        loc yvarlags ""
-        if `depvarlags' > 0 {   
-            forvalues l = 1/`depvarlags' { // Following Stock Watson (2018), Piger and Stockwell (2025)
-                loc yvarlags "`yvarlags' l`l'.d.`1'_`horizon'"
-            }
-        }
+        * Construct a local to store lags of the dependent variable (in first diff)
+        if `depvarlags' > 0 loc yvarlags l(1/`depvarlags').d.`1'
 
         * Let the user know what is going on
         di "***********************************************************************************************************"
@@ -139,9 +132,9 @@ program EstimateIRF
             di "Absorbed    : `absorb'"
         di "***********************************************************************************************************"
         
-
         * Run the regression and save results in the provided frame
-        qui ivreghdfe `1'_`horizon' (`endogenous' = `instruments') `exogenous' `yvarlags' [pw = `wt'] if `samp', vce(`errtype') absorb(`absorb')
+        sort state year
+        qui ivreghdfe Delta`h'`1' (`endogenous' = `instruments') `exogenous' `yvarlags' [pw = `wt'] if `samp', vce(`errtype') absorb(`absorb')
 
         * Record the results in the Estimates frame
         frame `framename' {
@@ -153,8 +146,6 @@ program EstimateIRF
             if "`endogenous'" != "" replace F_`suffix'    = `e(widstat)' if _n == _N
 
         }
-
-        
         
     }
 
