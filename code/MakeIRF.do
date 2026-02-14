@@ -84,7 +84,6 @@ set graphics on
 * Responses
 graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990 CapStock_Response_Iv1990, ///
 rows(3) cols(2) name(Responses_Iv1990)
-rtr
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
