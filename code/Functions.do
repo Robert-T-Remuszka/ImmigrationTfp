@@ -70,6 +70,7 @@ program PreRegProcessing
     egen Bartik_L1   = rowtotal(Bartik_L1_*),   missing     // Lagged shares
     egen Bartik_L2   = rowtotal(Bartik_L2_*),   missing
     drop Bartik_1990_* Bartik_L1_* Bartik_L2_*
+    la var Bartik_1990 "Bartik IV, 1990 Shares"
 
     
     ren state statename
