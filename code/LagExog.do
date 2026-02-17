@@ -20,7 +20,7 @@ loc testset ""
 local vlabs ""
 foreach lag of numlist 1/3 {
     
-    eststo m`lag': qui reghdfe Bartik_1990 l(1/`lag').fg, absorb(state year) vce(cluster year)
+    eststo m`lag': qui reghdfe Bartik_1990 l(1/`lag').fg, absorb(state year) vce(cluster year state)
     loc testset "`testset' L`lag'.fg"
     qui test `testset'
     estadd scalar p_F = `r(p)'
@@ -33,6 +33,6 @@ foreach lag of numlist 1/3 {
 
 esttab `models' using "${Tables}/Lag_exog.tex", replace booktabs varlabels(`vlabs') se drop(_cons) label ///
 stats(N r2_a p_F, fmt(%6.0fc %9.3f %9.3f)) ///
-subs("Standard errors in parentheses" "Standard errors clustered by year. All regressions include state and year fixed effects." ///
+subs("Standard errors in parentheses" "Standard errors clustered by state and year. All regressions include state and year fixed effects." ///
 "N" "Observations" "r2_a" "\$R^2$" "p_F" "P-Value of Joint Significance")
 
