@@ -13,20 +13,20 @@ qui PreRegProcessing
 /*****************************
     Estimate Responses
 *****************************/
-EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster year) framename(Z_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Z_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster year) framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster year) framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
-EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster year) framename(L_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year statefip) wt(emp) impulse(fg) ///
-errtype(cluster year) framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp')
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
 /*****************************
             PLOTS
