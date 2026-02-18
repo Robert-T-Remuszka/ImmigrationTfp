@@ -9,7 +9,7 @@ program PreRegProcessing
 
     * Generate foreign-born labor share and its growth rate
     gen f = Supply_Foreign
-    bys statefip (year): gen fg = (f - f[_n-1]) / emp
+    bys statefip (year): gen fg = log(f) - log(f[_n-1])
 
     * Calculate the shares
     qui ds Supply_*
@@ -97,7 +97,7 @@ Estimate the reponse of y to the impulse given in the option impulse.
 program EstimateIRF
 
     syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(integer 0) ///
-    horizon(integer 9) absorb(varlist) errtype(string) wt(string) framename(string) suffix(string) samp(string)] impulse(varname)
+    horizon(integer 9) absorb(varlist) wt(string) framename(string) suffix(string) samp(string) se_spec(string)] impulse(varname)
 
     * Create a place to store the results
     cap frame drop `framename'
@@ -110,10 +110,18 @@ program EstimateIRF
     }
 
     * Create long differences of the dependent variable
-    forvalues h = 0/9 {
+    forvalues h = 0/`horizon' {
         loc operator = "Delta`h'"
         bys statefip (year): gen `operator'`1' = log(`1'[_n + `h'] / `1'[_n - 1])
     }
+
+    * Absorb fixed effects
+    loc fes ""
+    foreach v in `absorb' {
+        loc fes "`fes' i.`v'"
+    }
+
+
     
 
     * Loop through and estimate the LP at each horizon
@@ -135,7 +143,7 @@ program EstimateIRF
         
         * Run the regression and save results in the provided frame
         sort state year
-        qui ivreghdfe Delta`h'`1' (`endogenous' = `instruments') `exogenous' `yvarlags' [pw = `wt'] if `samp', vce(`errtype') absorb(`absorb')
+        qui ivreg2 Delta`h'`1' (`endogenous' = `instruments') `exogenous' `yvarlags' `fes' [pw = `wt'] if `samp', `se_spec'
 
         * Record the results in the Estimates frame
         frame `framename' {
