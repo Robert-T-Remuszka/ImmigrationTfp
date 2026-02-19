@@ -20,8 +20,6 @@ program PreRegProcessing
         if !inlist("`region'","Total", "Foreign", "Domestic", "US") {
 
             gen s_`region' = `v' / emp
-            bys statefip (year): gen s_`region'_L1 = s_`region'[_n - 1]
-            bys statefip (year): gen s_`region'_L2 = s_`region'[_n - 2]
 
         }
 
@@ -50,7 +48,7 @@ program PreRegProcessing
             
             replace `v' = 0 if mi(`v')
             egen Supply_Agg_`region' = total(`v'), by(year)
-            bys statefip (year): gen fg_agg_`region' = asinh(Supply_Agg_`region') - asinh(Supply_Agg_`region'[_n-1])
+            bys statefip (year): gen fg_agg_`region' = (Supply_Agg_`region' - Supply_Agg_`region'[_n-1]) / emp_agg
 
         }
     }
@@ -61,8 +59,6 @@ program PreRegProcessing
 
         loc region = subinstr("`v'", "fg_agg_", "", 1)
         gen Bartik_1990_`region' = s_`region'_1990 * `v'
-        gen Bartik_L1_`region' = s_`region'_L1 * `v'
-        gen Bartik_L2_`region' = s_`region'_L2 * `v'
 
     }
 
