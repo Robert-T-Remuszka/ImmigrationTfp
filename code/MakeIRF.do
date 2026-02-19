@@ -13,6 +13,7 @@ qui PreRegProcessing
 /*****************************
     Estimate Responses
 *****************************/
+* Start with the standard Bartik
 EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
 framename(Z_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
@@ -28,12 +29,28 @@ framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) par
 EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
 framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
 
+* Look at the LOO Bartik
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
+
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Wage_Foreign_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
+
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(Wage_Domestic_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
+
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(L_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
+
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+framename(CapStock_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(9) partial(i.year i.state))
+
 /*****************************
             PLOTS
 *****************************/
 set graphics off
 
-loc suffixes "Iv1990"
+loc suffixes "Iv1990 Iv1990_LOO"
 loc depvars "Z Wage_Foreign Wage_Domestic L CapStock"
 loc ylabs "Z" "w{sup:F}" "w{sup:D}" "L" "K"
 loc counter = 1
@@ -41,6 +58,7 @@ foreach v in `depvars' {
 
     foreach suffix in `suffixes' {
 
+        
         frame `v'_`suffix' {
 
             qui summ h
@@ -55,26 +73,27 @@ foreach v in `depvars' {
             * Impulse response
             tw line Beta_`suffix' h, lc("0 147 245") lw(thick) || rarea Beta_upper Beta_lower h, fcolor(ebblue%30) lwidth(none) ///
             xlab(`hmin'(1)`hmax', nogrid) ytitle("{&Delta}{sup:h}ln(`ylab')", size(large)) ylab(, nogrid) xtitle("h") legend(off) ///
-            `yline' name(`v'_Response_`suffix') 
+            `yline' name(`v'_`suffix') 
             
             * Save
-            graph export "${Graphs}/`v'_Response_`suffix'.pdf", replace name(`v'_Response_`suffix')
+            graph export "${Graphs}/`v'_`suffix'.pdf", replace name(`v'_`suffix')
 
             * First stage diagnostics
-            if inlist("`suffix'", "Iv1990") {
+            if inlist("`suffix'", "Iv1990", "Iv1990_LOO") {
                 
                 graph bar F_Iv1990 if h > -1, over(h) bar(1, color("0 147 245") fcolor("0 147 245")) ylab(, nogrid labsize(small)) ///
-                legend(off) b1title("Horizon") ytitle("First Stage F Stat (`ylab')") name(`v'_Response_`suffix'_F)
+                legend(off) b1title("Horizon") ytitle("First Stage F Stat (`ylab')") name(`v'_`suffix'_F)
 
                 * Save
-                graph export "${Graphs}/`v'_Response_`suffix'_F.pdf", replace name(`v'_Response_`suffix'_F)
+                graph export "${Graphs}/`v'_`suffix'_F.pdf", replace name(`v'_`suffix'_F)
 
             }
 
         }
-
-        loc ++counter
+    
     }
+
+    loc ++counter
 
 }
 
@@ -82,14 +101,26 @@ foreach v in `depvars' {
 set graphics on
 
 * Responses
-graph combine Z_Response_Iv1990 L_Response_Iv1990 Wage_Foreign_Response_Iv1990 Wage_Domestic_Response_Iv1990 CapStock_Response_Iv1990, ///
+graph combine Z_Iv1990 L_Iv1990 Wage_Foreign_Iv1990 Wage_Domestic_Iv1990 CapStock_Iv1990, ///
 rows(3) cols(2) name(Responses_Iv1990)
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
+graph combine Z_Iv1990_LOO L_Iv1990_LOO Wage_Foreign_Iv1990_LOO Wage_Domestic_Iv1990_LOO CapStock_Iv1990_LOO, ///
+rows(3) cols(2) name(Responses_Iv1990_LOO)
+
+graph export "${Graphs}/Responses_Iv1990_LOO.pdf", replace name(Responses_Iv1990_LOO)
+
 * First Stages
-graph combine Z_Response_Iv1990_F L_Response_Iv1990_F Wage_Foreign_Response_Iv1990_F Wage_Domestic_Response_Iv1990_F CapStock_Response_Iv1990_F, ///
+graph combine Z_Iv1990_F L_Iv1990_F Wage_Foreign_Iv1990_F Wage_Domestic_Iv1990_F CapStock_Iv1990_F, ///
 rows(3) cols(2) name(Responses_Iv1990_F)
 
 graph export "${Graphs}/Responses_Iv1990_F.pdf", replace name(Responses_Iv1990_F)
+
+graph combine Z_Iv1990_LOO_F L_Iv1990_LOO_F Wage_Foreign_Iv1990_LOO_F Wage_Domestic_Iv1990_LOO_F CapStock_Iv1990_LOO_F, ///
+rows(3) cols(2) name(Responses_Iv1990_LOO_F)
+
+graph export "${Graphs}/Responses_Iv1990_LOO_F.pdf", replace name(Responses_Iv1990_LOO_F)
+
+
 
