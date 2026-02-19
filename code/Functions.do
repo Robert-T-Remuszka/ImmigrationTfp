@@ -39,7 +39,9 @@ program PreRegProcessing
 
     * Create aggregate shifts
     egen emp_agg = total(emp), by(year)
-    qui ds Supply_*
+    gen  emp_agg_LOO = emp_agg - emp
+    ds Supply_*
+    
     foreach v in `r(varlist)' {
 
         loc region = subinstr("`v'", "Supply_", "", 1)
@@ -48,26 +50,38 @@ program PreRegProcessing
             
             replace `v' = 0 if mi(`v')
             egen Supply_Agg_`region' = total(`v'), by(year)
-            bys statefip (year): gen fg_agg_`region' = (Supply_Agg_`region' - Supply_Agg_`region'[_n-1]) / emp_agg
+            gen  Supply_Agg_LOO_`region' = Supply_Agg_`region' - Supply_`region'
+            bys statefip (year): gen fg_agg_`region' = asinh(Supply_Agg_`region') - asinh(Supply_Agg_`region'[_n-1])
+            bys statefip (year): gen fg_agg_LOO_`region' = asinh(Supply_Agg_LOO_`region') - asinh(Supply_Agg_LOO_`region'[_n-1])
 
         }
     }
 
     * Create the Bartik instruments
-    qui ds fg_agg_*
+    loc rowtotal_LOO ""
+    loc rowtotal     ""
+    ds fg_agg_*
     foreach v in `r(varlist)' {
-
-        loc region = subinstr("`v'", "fg_agg_", "", 1)
-        gen Bartik_1990_`region' = s_`region'_1990 * `v'
-
+        
+        if substr("`v'", 8, 3) == "LOO" {
+            loc region = subinstr("`v'", "fg_agg_LOO_", "", 1)
+            gen Bartik_1990_`region'_LOO = s_`region'_1990 * `v'
+            loc rowtotal_LOO "`rowtotal_LOO' Bartik_1990_`region'_LOO"
+        }
+        
+        else {
+            loc region = subinstr("`v'", "fg_agg_", "", 1)
+            gen Bartik_1990_`region' = s_`region'_1990 * `v'
+            loc rowtotal "`rowtotal' Bartik_1990_`region'"
+        }
+    
     }
 
-    egen Bartik_1990 = rowtotal(Bartik_1990_*), missing     // Pre-period shares
-    egen Bartik_L1   = rowtotal(Bartik_L1_*),   missing     // Lagged shares
-    egen Bartik_L2   = rowtotal(Bartik_L2_*),   missing
-    drop Bartik_1990_* Bartik_L1_* Bartik_L2_*
+    egen Bartik_1990_LOO   = rowtotal(`rowtotal_LOO'), missing
+    egen Bartik_1990       = rowtotal(`rowtotal'), missing
     la var Bartik_1990 "Bartik IV, 1990 Shares"
-
+    la var Bartik_1990_LOO "Barti IV, 1990 Shares (LOO)"
+    drop `rowtotal_LOO' `rowtotal'
     
     ren state statename
     encode statefip, gen(state)
@@ -150,5 +164,7 @@ program EstimateIRF
         }
         
     }
+
+    drop Delta*
 
 end
