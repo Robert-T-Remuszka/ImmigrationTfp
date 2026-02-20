@@ -80,7 +80,7 @@ program PreRegProcessing
     egen Bartik_1990_LOO   = rowtotal(`rowtotal_LOO'), missing
     egen Bartik_1990       = rowtotal(`rowtotal'), missing
     la var Bartik_1990 "Bartik IV, 1990 Shares"
-    la var Bartik_1990_LOO "Barti IV, 1990 Shares (LOO)"
+    la var Bartik_1990_LOO "Bartik IV, 1990 Shares (LOO)"
     drop `rowtotal_LOO' `rowtotal'
     
     ren state statename
