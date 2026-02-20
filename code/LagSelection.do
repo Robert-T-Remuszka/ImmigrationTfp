@@ -48,13 +48,3 @@ subs("Standard errors in parentheses" ///
 "N" "Observations" "r2_a" "Adj. \$R^2$" ///
 "LD." "First Lag " "L2D." "Second Lag " "L3D." "Third Lag " "L4D." "Fourth Lag " "L5D." "Fifth Lag ") nomtitles ///
 star(* 0.10 ** 0.05 *** 0.01) mgroups("\$Z$ Regressions" "\$w^D$ Regressions", pattern(1 0 0 0 1 0 0 0) span prefix(\multicolumn{@span}{c}{) suffix(}) erepeat(\cmidrule(lr){@span}))
-
-/*
-esttab `models' using "${Tables}/Lag_order_Z.tex", replace booktabs label se nocons drop(*.fg Bartik_1990) ///
-stats(N r2_a, fmt(%6.0fc %9.3f)) ///
-subs("Standard errors in parentheses" ///
-"\makecell[l]{Driscroll-Kraay standard errors with bandwidth set to nine. All regressions are employment \\weighted and include state and year fixed effects.}" ///
-"N" "Observations" "r2_a" "Adj. \$R^2$" ///
-"LD." "First Lag " "L2D." "Second Lag " "L3D." "Third Lag " "L4D." "Fourth Lag " "L5D." "Fifth Lag ") nomtitles ///
-star(* 0.10 ** 0.05 *** 0.01) mgroups("\$Z$ Regressions" "\$w^D$ Regressions", pattern(1 0 0 0 1 0 0 0) span prefix(\multicolumn{@span}{c}{) suffix(}))
-*/
