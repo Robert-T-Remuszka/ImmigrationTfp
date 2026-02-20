@@ -143,7 +143,7 @@ program EstimateIRF
         * Let the user know what is going on
         di "***********************************************************************************************************"
             di "Dep Var     : `1'_`horizon'"
-            di "Exog.  RHS  : `depvarlags' `exogenous' "
+            di "Exog.  RHS  : `yvarlags' `exogenous' "
             di "Endog. RHS  : `endogenous'"
             di "Absorbed    : `absorb'"
         di "***********************************************************************************************************"
