@@ -14,6 +14,7 @@ sort state year
 
 ********* Make Sequential F-test tables
 loc numlags 4
+loc dkraayband 11
 
 * A local to store the lags that we are looking to test
 loc vlabs   ""
@@ -32,7 +33,7 @@ foreach y in `depvars' {
 
     foreach lag of numlist 1/`numlags' {
     
-        eststo `y'_L`lag': qui ivreg2 fg Bartik_1990 L(1/`lag').D.ln`y' i.year i.state L(1/4).fg [pw = emp] if `samp', dkraay(9) partial(i.year i.state)
+        eststo `y'_L`lag': qui ivreg2 fg Bartik_1990 L(1/`lag').D.ln`y' i.year i.state L(1/4).fg [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year i.state)
 
         loc models "`models' `y'_L`lag'"
 
@@ -44,7 +45,7 @@ foreach y in `depvars' {
 esttab `models' using "${Tables}/DepvarLags.tex", replace booktabs label se nocons drop(*.fg Bartik_1990) ///
 stats(N r2_a, fmt(%6.0fc %9.3f)) ///
 subs("Standard errors in parentheses" ///
-"\makecell[l]{Driscroll-Kraay standard errors with bandwidth set to nine. All regressions are employment \\weighted and include state and year fixed effects.}" ///
+"\makecell[l]{Driscroll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions are employment \\weighted and include state and year fixed effects.}" ///
 "N" "Observations" "r2_a" "Adj. \$R^2$" ///
 "LD." "First Lag " "L2D." "Second Lag " "L3D." "Third Lag " "L4D." "Fourth Lag ") nomtitles ///
 star(* 0.10 ** 0.05 *** 0.01) mgroups("\$Z$ Regressions" "\$w^D$ Regressions", pattern(1 0 0 0 1 0 0 0) span prefix(\multicolumn{@span}{c}{) suffix(}) erepeat(\cmidrule(lr){@span}))
