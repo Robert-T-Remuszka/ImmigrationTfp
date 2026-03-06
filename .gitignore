@@ -13,3 +13,5 @@ code/Credentials.py
 ltex.dictionary.en-US.txt
 *.jld2
 *.out
+bartik_weight.ado
+._bartik_weight.ado
