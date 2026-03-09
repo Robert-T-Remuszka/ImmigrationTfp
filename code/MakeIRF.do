@@ -11,40 +11,41 @@ loc samp inrange(year, 1994, 2021)
 qui PreRegProcessing
 
 loc dkraayband = 11
+loc depvarlags = 3
 
 /*****************************
     Estimate Responses
 *****************************/
 * Start with the standard Bartik
-EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Z_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
 * Look at the LOO Bartik
-EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Wage_Foreign_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(Wage_Domestic_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(L_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(3) absorb(year state) wt(emp) impulse(fg) ///
+EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(`depvarlags') absorb(year state) wt(emp) impulse(fg) ///
 framename(CapStock_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/4).fg)
 
 /*****************************
