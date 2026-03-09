@@ -128,8 +128,8 @@ program EstimateIRF
         loc fes "`fes' i.`v'"
     }
 
-
-    
+    * Logs of lhs levels
+    gen log`1' = log(`1')
 
     * Loop through and estimate the LP at each horizon
     forvalues h = 0/`horizon' {
@@ -138,7 +138,7 @@ program EstimateIRF
         loc horizon = "F" + string(abs(`h'))
 
         * Construct a local to store lags of the dependent variable (in first diff)
-        if `depvarlags' > 0 loc yvarlags l(1/`depvarlags').d.`1'
+        if `depvarlags' > 0 loc yvarlags l(1/`depvarlags').d.log`1'
 
         * Let the user know what is going on
         di "***********************************************************************************************************"
@@ -166,5 +166,6 @@ program EstimateIRF
     }
 
     drop Delta*
+    drop log`1'
 
 end
