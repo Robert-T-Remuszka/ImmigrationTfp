@@ -52,10 +52,9 @@ program PreRegProcessing
             bys statefip (year): gen fg_agg_`region' = log(Supply_Agg_`region') - log(Supply_Agg_`region'[_n-1])
             
             * LOO
-            bys statefip (year): gen fg_`region' = log(`v') - log(`v'[_n-1])
-            egen fg_`region'_total = total(fg_`region'), by(year)
-            gen  fg_agg_LOO_`region' = (fg_`region'_total - fg_`region') / 50
-            drop fg_`region'_total fg_`region'
+            gen Supply_Agg_`region'_LOO = Supply_Agg_`region' - `v'
+            gen  fg_agg_LOO_`region' = log(Supply_Agg_`region'_LOO) - log(Supply_Agg_`region'_LOO[_n-1])
+            drop Supply_Agg_`region'_LOO
 
         }
     }
