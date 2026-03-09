@@ -41,7 +41,6 @@ program PreRegProcessing
     egen emp_agg = total(emp), by(year)
     gen  emp_agg_LOO = emp_agg - emp
     ds Supply_*
-    
     foreach v in `r(varlist)' {
 
         loc region = subinstr("`v'", "Supply_", "", 1)
@@ -50,9 +49,13 @@ program PreRegProcessing
             
             replace `v' = 0 if mi(`v')
             egen Supply_Agg_`region' = total(`v'), by(year)
-            gen  Supply_Agg_LOO_`region' = Supply_Agg_`region' - Supply_`region'
             bys statefip (year): gen fg_agg_`region' = log(Supply_Agg_`region') - log(Supply_Agg_`region'[_n-1])
-            bys statefip (year): gen fg_agg_LOO_`region' = log(Supply_Agg_LOO_`region') - log(Supply_Agg_LOO_`region'[_n-1])
+            
+            * LOO
+            bys statefip (year): gen fg_`region' = log(`v') - log(`v'[_n-1])
+            egen fg_`region'_total = total(fg_`region'), by(year)
+            gen  fg_agg_LOO_`region' = (fg_`region'_total - fg_`region') / 50
+            drop fg_`region'_total fg_`region'
 
         }
     }
