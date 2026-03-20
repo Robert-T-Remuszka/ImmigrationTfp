@@ -36,8 +36,6 @@ forvalues lag = 1/`maxlag' {
 
     eststo m`lag': qui ivreg2 fg Bartik_1990 l(1/`lag').fg i.year i.state ///
         [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year i.state)
-    qui test Bartik_1990
-    estadd scalar F_bartik = e(F)
 
     loc models "`models' m`lag'"
 
@@ -48,8 +46,6 @@ forvalues lag = 1/`maxlag' {
 
     eststo m`=`lag'+`maxlag'': qui ivreg2 fg Bartik_1990 L.Bartik_1990 l(1/`lag').fg i.year i.state ///
         [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year i.state)
-    qui test Bartik_1990 L.Bartik_1990
-    estadd scalar F_bartik = e(F)
 
     loc models "`models' m`=`lag'+`maxlag''"
 
@@ -60,6 +56,43 @@ esttab `models' using "${Tables}/FirstStage.tex", replace booktabs ///
     order(L.fg L2.fg L3.fg L4.fg Bartik_1990 L.Bartik_1990) ///
     varlabels(`vlabs') se label nonumbers ///
     mgroups("Without Bartik Lag" "With Bartik Lag", pattern(1 0 0 0 1 0 0 0) span prefix(\multicolumn{@span}{c}{) suffix(}) erepeat(\cmidrule(lr){@span})) ///
-    stats(N r2_a F_bartik, fmt(%6.0fc %9.3f %9.1f)) ///
+    stats(N r2_a, fmt(%6.0fc %9.3f)) ///
     subs("Standard errors in parentheses" "Driscoll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions include state and year fixed effects." ///
-    "F_bartik" "F-Stat" "N" "Observations" "r2_a" "Adj. \$R^2$") star(* 0.1 ** 0.05 *** 0.01)
+    "N" "Observations" "r2_a" "Adj. \$R^2$") star(* 0.1 ** 0.05 *** 0.01)
+
+/**********************************************************************
+Lag Selection for Dependent Variables
+**********************************************************************/
+
+loc models ""
+loc depvars "Z Wage_Domestic Wage_Foreign"
+loc varlabs "\$\Delta^0\text{ln}Z_t$ \$\Delta^0\text{ln}w^D_t$ \$\Delta^0\text{ln}w^F_t$"
+loc i = 1
+
+foreach y in `depvars' {
+
+    gen ln`y' = log(`y')
+    loc varlab: word `i' of `varlabs'
+    la var ln`y' "`varlab'"
+    loc ++i
+
+    foreach lag of numlist 2/4 {
+
+        eststo `y'_L`lag': qui ivreg2 fg Bartik_1990 L.Bartik_1990 L(1/`lag').D.ln`y' L(1/4).fg i.year i.state ///
+            [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year i.state)
+
+        loc models "`models' `y'_L`lag'"
+
+    }
+
+}
+
+esttab `models' using "${Tables}/DepvarLags.tex", replace booktabs label se nocons nonumbers ///
+    drop(*.fg Bartik_1990 L.Bartik_1990) ///
+    stats(N r2_a, fmt(%6.0fc %9.3f)) ///
+    subs("Standard errors in parentheses" "Driscoll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions include state and year fixed effects." ///
+    "N" "Observations" "r2_a" "Adj. \$R^2$" ///
+    "LD." "First Lag " "L2D." "Second Lag " "L3D." "Third Lag " "L4D." "Fourth Lag ") ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    mgroups("\$\Delta^0\ln Z_t$" "\$\Delta^0\ln w^D_t$" "\$\Delta^0\ln w^F_t$", pattern(1 0 0 1 0 0 1 0 0) span ///
+    prefix(\multicolumn{@span}{c}{) suffix(}) erepeat(\cmidrule(lr){@span}))
