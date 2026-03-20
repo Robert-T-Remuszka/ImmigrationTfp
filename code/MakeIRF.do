@@ -110,7 +110,6 @@ rows(3) cols(2) name(Responses_Iv1990)
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
-rtr
 graph combine Z_Iv1990_LOO L_Iv1990_LOO Wage_Foreign_Iv1990_LOO Wage_Domestic_Iv1990_LOO CapStock_Iv1990_LOO, ///
 rows(3) cols(2) name(Responses_Iv1990_LOO)
 
