@@ -11,5 +11,6 @@ Soln = SolveTransition(μ̇; p = Params1);
 
 # Check if u̇ goes to one
 plot(1:T, Soln.U̇ᵈ[1,:], grid = false, linewidth = 3., 
-label = L"$\dot u^d_{t+1}$", dpi = 300, xticks = 1:T, title = "Lifetime Utilility Changes")
+label = L"$\dot u^d_{t+1}$", dpi = 300, xticks = (1:T, 0:T-1), title = "Lifetime Utilility Changes", 
+xlabel = "Periods After Shock")
 plot!(1:T, Soln.U̇ᶠ[1,:], grid = false, linewidth = 3.,label = L"$\dot u^f_{t+1}$")
