@@ -14,7 +14,7 @@ sort state year
 loc dkraayband = 9
 loc maxlag     = 4
 
-la var fg "\$\Delta^0L^F_t"
+la var fg "\$\Delta^0\ln L^F_t"
 
 /*******
 First Stage
@@ -41,7 +41,7 @@ forvalues lag = 1/`maxlag' {
 
 }
 
-* Columns 5-8: two lags of Bartik, varying lags of fg
+* Columns 5-8: one lag of Bartik, varying lags of fg
 forvalues lag = 1/`maxlag' {
 
     eststo m`=`lag'+`maxlag'': qui ivreg2 fg Bartik_1990 L.Bartik_1990 l(1/`lag').fg i.year i.state ///
