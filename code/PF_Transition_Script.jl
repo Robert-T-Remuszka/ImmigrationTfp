@@ -14,3 +14,12 @@ plot(1:T, Soln.U̇ᵈ[1,:], grid = false, linewidth = 3.,
 label = L"$\dot u^d_{t+1}$", dpi = 300, xticks = (1:T, 0:T-1), title = "Lifetime Utilility Changes", 
 xlabel = "Periods After Shock")
 plot!(1:T, Soln.U̇ᶠ[1,:], grid = false, linewidth = 3.,label = L"$\dot u^f_{t+1}$")
+
+# Plot the Z IRF
+Z = ComputeZ(Soln; p = Params1)
+
+p = plot(1:T, Z[1,:],
+grid = false, linewidth = 3., 
+label = L"$Z_{l,t}$", dpi = 300, xticks = (1:T, 0:T-1), title = "Region One Productivity (3 Region Ex.)", 
+xlabel = "Periods After Shock")
+savefig(p, "../../output/graphs/Z_Transition_Example.pdf")

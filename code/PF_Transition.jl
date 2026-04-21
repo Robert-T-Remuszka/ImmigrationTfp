@@ -364,4 +364,27 @@ function SolveTransition(μ̇::Vector{T1}; p::Parameters = Params1, outer_tol::T
     end
 
     return Soln
+
+end
+
+#================================================================
+                        OTHER FUNCTIONS
+================================================================#
+function ComputeZ(Soln::TransitSoln; p::Parameters = Params1)
+
+    (; ρ, θ, r, δ, γᶠ, γᵈ, αᶠ, αᵈ, Γ) = p
+    (; Wᶠ, Wᵈ) = Soln
+
+    # Precompute the integral expressions
+    Exp1         = ((γᵈ - γᶠ) *  (1 - ρ)) / ((γᵈ - γᶠ) * (1 - ρ) - ρ * γᵈ)                         # Eω^(ρ/(1-ρ) * γᵈ / (γᵈ - γᶠ))
+    Exp2         = (1 - ρ) / (1 - 2 * ρ)                                                           # Eω^(ρ / (1-ρ))
+    No_Arb_Stuff = (((αᶠ .* Wᵈ) ./ (αᵈ .* Wᶠ)) .* exp(-Γ)).^((ρ * γᵈ) / ((1 - ρ) * (γᵈ - γᶠ)))     # The coefficient coming from 𝒯
+
+    # Compute parts of the production function
+    Foreign_Int  = max.((1 - ρ) / (γᶠ * ρ) .* (No_Arb_Stuff .* Exp1 .- Exp2), 1e-4)
+    Domestic_Int = max.(exp((ρ / (1 - ρ)) * Γ) * ((1 - ρ) / (ρ * γᵈ)) .* (exp((ρ / (1-ρ)) * γᵈ) .-  No_Arb_Stuff .* Exp1), 1e-4)
+    Z            = max.((Domestic_Int + Foreign_Int).^((1-ρ)/ρ), 1e-4)
+
+    return Z
+
 end
