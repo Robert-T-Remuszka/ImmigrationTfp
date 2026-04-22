@@ -110,108 +110,114 @@ if !`skipIpums' {
 
         xframeappend appendthis, drop
     }
+    
     /*********************************
             CLEAN CPS
     **********************************/
     loc files: dir "${Data}/cps/" files "*.dta"
     foreach f in `files' {
         
-        frame create appendthis
-        frame appendthis {
+        if substr("`f'", 4, 4) != "2000" {
 
-            use "${Data}/cps/`f'", clear
+            frame create appendthis
+            frame appendthis {
 
-            * Setup statefip codes as strings
-            tostring STATEFIP, replace
-            replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
-            
-            * Sample restrictions
-            drop if AGE < 16 | AGE == 999                               // AGE == 999 if missing
-            drop if UHRSWORK < 35                                       // UHRSWORK < 35 also gets rid of missings which are coded as 0
+                use "${Data}/cps/`f'", clear
 
-            * Prepare the birthplace variable
-            tostring BPL, replace
-            replace BPL = "00" + BPL if strlen(BPL) == 3
-            replace BPL = "0" + BPL  if strlen(BPL) == 4
-            drop if inlist(substr(BPL,1,1), "8", "9")                  // Drop those who don't have a country of origin
-
-            * Some additional cleaning
-            drop if CITIZEN == 9
-            replace INCWAGE = . if inlist(INCWAGE, 999999, 999998)          // Drop missing wage data
-            egen incwage_censor = pctile(INCWAGE), p(99) by(STATEFIP)       // Make the censoring as consistent as possible with ACS
-            replace INCWAGE = incwage_censor if INCWAGE >= incwage_censor
-
-
-            * Assigning origins based on Peri (2012)
-            gen ImmigrantGroup = "United States" if substr(BPL,1,1) == "0"
-            replace ImmigrantGroup = "Mexico" if BPL == "20000"
-            replace ImmigrantGroup = "Latin America" if BPL == "11000" | (inlist(substr(BPL,1,2), "21", "25", "26", "30") & BPL != "26030")
-            replace ImmigrantGroup = "Western Europe" if inlist(BPL,"45300","45000") | inlist(substr(BPL,1,2), "40", "41", "42", "43")
-            replace ImmigrantGroup = "Russia and Eastern Europe" if inlist(substr(BPL,1,2), "45", "46") & !inlist(BPL,"45300", "45000")
-            replace ImmigrantGroup = "Canada-Australia-New Zealand" if inlist(BPL, "15000", "70020", "70010") | substr(BPL, 1, 2) == "15"
-            replace ImmigrantGroup = "China" if BPL == "50000"
-            replace ImmigrantGroup = "India" if BPL == "52100"
-            replace ImmigrantGroup = "Rest of Asia" if inlist(substr(BPL,1,2), "50", "51", "52","53", "54", "55") & !inlist(BPL,"52100","50000")
-            replace ImmigrantGroup = "Africa" if substr(BPL,1,2) == "60"
-            drop if mi(ImmigrantGroup)                                 // Drop unassigned origins - primarily US terriories
-
-
-            * Keep just what we need for aggregated analysis
-            keep ASECWT STATEFIP YEAR ImmigrantGroup INCWAGE
-            qui ds ImmigrantGroup, not
-            foreach v in `r(varlist)' {
-                loc newname = strlower("`v'")
-                ren `v' `newname'
-            }
-
-            * Aggregate up to the state x year x immigrant group level
-            collapse (mean) Wage = incwage (rawsum) Supply = asecwt [pw = asecwt], by(statefip year ImmigrantGroup)
-
-            * Reshape wide - some groups have short enough names that we can use those as their stubs
-            gen abbr = "_CaAuNz" if ImmigrantGroup == "Canada-Australia-New Zealand"
-            replace abbr = "_US" if ImmigrantGroup == "United States"
-            replace abbr = "_WestEu" if ImmigrantGroup == "Western Europe"
-            replace abbr = "_LA" if ImmigrantGroup == "Latin America"
-            replace abbr = "_EastEu" if ImmigrantGroup == "Russia and Eastern Europe"
-            replace abbr = "_AsiaOther" if ImmigrantGroup == "Rest of Asia"
-            replace abbr = "_" + ImmigrantGroup if mi(abbr)
-
-            tostring year, replace
-            drop ImmigrantGroup
-            reshape wide Wage Supply, i(statefip year) j(abbr) s
-
-            * Labor wage and quantity variables
-            qui ds Wage_*
-            foreach v in `r(varlist)' {
+                * Setup statefip codes as strings
+                tostring STATEFIP, replace
+                replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
                 
-                * Put longer group name in variable labels
-                loc origin = substr("`v'", 6, .)
-                if substr("`v'", 6, .) == "CaAuNz" loc origin "Canada-Australia-New Zealand"
-                if substr("`v'", 6, .) == "US" loc origin "United States"
-                if substr("`v'", 6, .) == "WestEu" loc origin "Western Europe"
-                if substr("`v'", 6, .) == "LA" loc origin "Latin America"
-                if substr("`v'", 6, .) == "EastEu" loc origin "Russia and Eastern Europe"
-                if substr("`v'", 6, .) == "AsiaOther" loc origin "Asia Other"
-                
-                la var `v' "Foreign-born wage (2017 Dollars), `origin'"
+                * Sample restrictions
+                drop if AGE < 16 | AGE == 999                               // AGE == 999 if missing
+                drop if UHRSWORK < 35                                       // UHRSWORK < 35 also gets rid of missings which are coded as 0
+
+                * Prepare the birthplace variable
+                tostring BPL, replace
+                replace BPL = "00" + BPL if strlen(BPL) == 3
+                replace BPL = "0" + BPL  if strlen(BPL) == 4
+                drop if inlist(substr(BPL,1,1), "8", "9")                  // Drop those who don't have a country of origin
+
+                * Some additional cleaning
+                drop if CITIZEN == 9
+                replace INCWAGE = . if inlist(INCWAGE, 999999, 999998)          // Drop missing wage data
+                egen incwage_censor = pctile(INCWAGE), p(99) by(STATEFIP)       // Make the censoring as consistent as possible with ACS
+                replace INCWAGE = incwage_censor if INCWAGE >= incwage_censor
+
+
+                * Assigning origins based on Peri (2012)
+                gen ImmigrantGroup = "United States" if substr(BPL,1,1) == "0"
+                replace ImmigrantGroup = "Mexico" if BPL == "20000"
+                replace ImmigrantGroup = "Latin America" if BPL == "11000" | (inlist(substr(BPL,1,2), "21", "25", "26", "30") & BPL != "26030")
+                replace ImmigrantGroup = "Western Europe" if inlist(BPL,"45300","45000") | inlist(substr(BPL,1,2), "40", "41", "42", "43")
+                replace ImmigrantGroup = "Russia and Eastern Europe" if inlist(substr(BPL,1,2), "45", "46") & !inlist(BPL,"45300", "45000")
+                replace ImmigrantGroup = "Canada-Australia-New Zealand" if inlist(BPL, "15000", "70020", "70010") | substr(BPL, 1, 2) == "15"
+                replace ImmigrantGroup = "China" if BPL == "50000"
+                replace ImmigrantGroup = "India" if BPL == "52100"
+                replace ImmigrantGroup = "Rest of Asia" if inlist(substr(BPL,1,2), "50", "51", "52","53", "54", "55") & !inlist(BPL,"52100","50000")
+                replace ImmigrantGroup = "Africa" if substr(BPL,1,2) == "60"
+                drop if mi(ImmigrantGroup)                                 // Drop unassigned origins - primarily US terriories
+
+
+                * Keep just what we need for aggregated analysis
+                keep ASECWT STATEFIP YEAR ImmigrantGroup INCWAGE
+                qui ds ImmigrantGroup, not
+                foreach v in `r(varlist)' {
+                    loc newname = strlower("`v'")
+                    ren `v' `newname'
+                }
+
+                * Aggregate up to the state x year x immigrant group level
+                collapse (mean) Wage = incwage (rawsum) Supply = asecwt [pw = asecwt], by(statefip year ImmigrantGroup)
+
+                * Reshape wide - some groups have short enough names that we can use those as their stubs
+                gen abbr = "_CaAuNz" if ImmigrantGroup == "Canada-Australia-New Zealand"
+                replace abbr = "_US" if ImmigrantGroup == "United States"
+                replace abbr = "_WestEu" if ImmigrantGroup == "Western Europe"
+                replace abbr = "_LA" if ImmigrantGroup == "Latin America"
+                replace abbr = "_EastEu" if ImmigrantGroup == "Russia and Eastern Europe"
+                replace abbr = "_AsiaOther" if ImmigrantGroup == "Rest of Asia"
+                replace abbr = "_" + ImmigrantGroup if mi(abbr)
+
+                tostring year, replace
+                drop ImmigrantGroup
+                reshape wide Wage Supply, i(statefip year) j(abbr) s
+
+                * Labor wage and quantity variables
+                qui ds Wage_*
+                foreach v in `r(varlist)' {
+                    
+                    * Put longer group name in variable labels
+                    loc origin = substr("`v'", 6, .)
+                    if substr("`v'", 6, .) == "CaAuNz" loc origin "Canada-Australia-New Zealand"
+                    if substr("`v'", 6, .) == "US" loc origin "United States"
+                    if substr("`v'", 6, .) == "WestEu" loc origin "Western Europe"
+                    if substr("`v'", 6, .) == "LA" loc origin "Latin America"
+                    if substr("`v'", 6, .) == "EastEu" loc origin "Russia and Eastern Europe"
+                    if substr("`v'", 6, .) == "AsiaOther" loc origin "Asia Other"
+                    
+                    la var `v' "Foreign-born wage (2017 Dollars), `origin'"
+                }
+
+                qui ds Supply_*
+                foreach v in `r(varlist)' {
+
+                    loc origin = substr("`v'", 8, .)
+                    if substr("`v'", 8, .) == "CaAuNz" loc origin "Canada-Australia-New Zealand"
+                    if substr("`v'", 8, .) == "US" loc origin "United States"
+                    if substr("`v'", 8, .) == "WestEu" loc origin "Western Europe"
+                    if substr("`v'", 8, .) == "LA" loc origin "Latin America"
+                    if substr("`v'", 8, .) == "EastEu" loc origin "Russia and Eastern Europe"
+                    if substr("`v'", 8, .) == "AsiaOther" loc origin "Asia Other"
+
+                    la var `v' "Foreign-born quantity, `origin'"
+                }
             }
 
-            qui ds Supply_*
-            foreach v in `r(varlist)' {
+            xframeappend appendthis, drop
 
-                loc origin = substr("`v'", 8, .)
-                if substr("`v'", 8, .) == "CaAuNz" loc origin "Canada-Australia-New Zealand"
-                if substr("`v'", 8, .) == "US" loc origin "United States"
-                if substr("`v'", 8, .) == "WestEu" loc origin "Western Europe"
-                if substr("`v'", 8, .) == "LA" loc origin "Latin America"
-                if substr("`v'", 8, .) == "EastEu" loc origin "Russia and Eastern Europe"
-                if substr("`v'", 8, .) == "AsiaOther" loc origin "Asia Other"
-
-                la var `v' "Foreign-born quantity, `origin'"
-            }
         }
-
-        xframeappend appendthis, drop
+        
     }
 
     destring year, replace
