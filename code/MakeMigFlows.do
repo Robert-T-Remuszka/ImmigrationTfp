@@ -263,7 +263,6 @@ replace Foreign_  = min(`r(p95)', Foreign_) if !(statefip == "ROW" & Origin == "
 qui summ Domestic_ if !(statefip == "ROW" & Origin == "ROW"), d
 replace Domestic_ = min(`r(p95)', Domestic_) if !(statefip == "ROW" & Origin == "ROW")
 
-reshape wide For Dom, i(year statefip) j(Origin) s
 drop if year == 1994 // don't need this one observation
 
 save "${Data}/MigFlows.dta", replace
