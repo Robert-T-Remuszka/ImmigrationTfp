@@ -15,6 +15,7 @@ The data come from several sources. In order to download the data and replicate 
     * Method developed by El-Shagi and Yamarik (2021).
 5. [**Federal Reserve Economic Data (FRED)**](https://fred.stlouisfed.org/)
     * Series: [GDP (Implicit Price Deflator, 2017 dollars)](https://fred.stlouisfed.org/series/A191RD3A086NBEA), [Gross Private Domestic Investment: Fixed Investment (Implicit Price Deflator)](https://fred.stlouisfed.org/series/A008RD3Q086SBEA)
+6. [**UN Population Data**](https://population.un.org/wpp/)
 
 # Run Order
 There are several files that combine these raw data sources to create a panel of US states. Here are links to the files in order of which they are run and the tasks they complete;
@@ -33,5 +34,5 @@ There are several files that combine these raw data sources to create a panel of
     * Output: ```data/StateTfpAndTaskAgg.csv```
 5. [**Merge in TFP**](code/MakeStateAnalysis.do)
     * Output: ```data/StateAnalysis.dta```
-6. [**Estimate Productivity Elasticity**](code/TfpRegressions.do)
-    * Output(s): ```output/graphs/IvOlsTfp.pdf```, ```output/graphs/IvLooOlsTfp.pdf```, ```FirstStageF.pdf```
+6. [**Construct Migration Flows**](code/MakeMigFlows.do)
+    * Output: ```data/MigFlows.dta```
