@@ -270,4 +270,5 @@ drop FipNameCross
 frame drop FipNameCross
 order Origin State
 
+recast double pi_*
 save "${Data}/PiMat.dta", replace
