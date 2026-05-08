@@ -208,8 +208,8 @@ function UpdateChanges(Transit::TransitSoln, μ̇::Vector{T1}; p::Parameters = P
             sum_d, sum_f = 0.0, 0.0
             for lp in 1:N
                 cost_change = l == N && lp < N ? μ̇[t] : 1.
-                sum_d += Πᵈ_t[l, lp] * U̇ᵈ_new[lp, t+1]^(β/νᵈ) * cost_change^(1/νᵈ)
-                sum_f += Πᶠ_t[l, lp] * U̇ᶠ_new[lp, t+1]^(β/νᶠ) * cost_change^(1/νᶠ)
+                sum_d += Πᵈ_t[l, lp] * U̇ᵈ_new[lp, t+1]^(β/νᵈ) * cost_change^(-1/νᵈ)
+                sum_f += Πᶠ_t[l, lp] * U̇ᶠ_new[lp, t+1]^(β/νᶠ) * cost_change^(-1/νᶠ)
             end
             ẇᵈ = t == 1 ? 1.0 : Wᵈ[l, t] / Wᵈ[l, t-1]
             ẇᶠ = t == 1 ? 1.0 : Wᶠ[l, t] / Wᶠ[l, t-1]
@@ -250,8 +250,8 @@ function UpdateProbabilities(Transit::TransitSoln, μ̇::Vector{T1}; p::Paramete
             for t in 1:T - 1
 
                 cost_change = l == N && lp != N ? μ̇[t] : 1.
-                Denomᵈ[l,t] += Πᵈ_lag[l, lp, t] * U̇ᵈ_lead[lp,t]^(β/νᵈ) * (cost_change)^(1/νᵈ)
-                Denomᶠ[l,t] += Πᶠ_lag[l, lp, t] * U̇ᶠ_lead[lp,t]^(β/νᶠ) * (cost_change)^(1/νᶠ)
+                Denomᵈ[l,t] += Πᵈ_lag[l, lp, t] * U̇ᵈ_lead[lp,t]^(β/νᵈ) * (cost_change)^(-1/νᵈ)
+                Denomᶠ[l,t] += Πᶠ_lag[l, lp, t] * U̇ᶠ_lead[lp,t]^(β/νᶠ) * (cost_change)^(-1/νᶠ)
 
             end
 
@@ -267,8 +267,8 @@ function UpdateProbabilities(Transit::TransitSoln, μ̇::Vector{T1}; p::Paramete
             for t in 1:T-1
 
                 cost_change = l == N && lp != N ? μ̇[t] : 1.
-                Πᵈ_new[l,lp,t] = (U̇ᵈ_lead[lp,t]^(β/νᵈ) * cost_change^(1/νᵈ) / Denomᵈ[l,t]) * Πᵈ_lag[l,lp,t] 
-                Πᶠ_new[l,lp,t] = (U̇ᶠ_lead[lp,t]^(β/νᶠ) * cost_change^(1/νᶠ) / Denomᶠ[l,t]) * Πᶠ_lag[l,lp,t]
+                Πᵈ_new[l,lp,t] = (U̇ᵈ_lead[lp,t]^(β/νᵈ) * cost_change^(-1/νᵈ) / Denomᵈ[l,t]) * Πᵈ_lag[l,lp,t] 
+                Πᶠ_new[l,lp,t] = (U̇ᶠ_lead[lp,t]^(β/νᶠ) * cost_change^(-1/νᶠ) / Denomᶠ[l,t]) * Πᶠ_lag[l,lp,t]
 
             end
         end
