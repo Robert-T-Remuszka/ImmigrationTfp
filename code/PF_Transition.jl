@@ -58,7 +58,7 @@ function Parameters(p::AuxParameters = p_star;
     Γ::T2  = p.Γ,
     αᶠ::T2 = p.αᶠ,
     αᵈ::T2 = p.αᵈ,
-    ψ::T2  = 0.45,
+    ψ::T2  = 0.50,
     #National_Quota::T2 = (66000 + 85000) / 1e+9, # H-2B Statutory quota + H-1B Statutory with advanced degree exemption
     wᵈ_row::T2         = ( # See IRS Statistics of Income, deflated to 2009 real values using GDP deflator
     60077  / 0.77          # 1996, thousands of 2009 USD
@@ -187,7 +187,6 @@ end
 
 """
 This function takes the current wage vector in each location and uses it to update u̇'s.
-Solves the value-change recursion exactly via a backwards from the terminal condition.
 """
 function UpdateChanges(Transit::TransitSoln, μ̇::Vector{T1}; p::Parameters = Params1) where{T1 <: Real}
 
@@ -198,7 +197,7 @@ function UpdateChanges(Transit::TransitSoln, μ̇::Vector{T1}; p::Parameters = P
     U̇ᵈ_new = ones(N, T)
     U̇ᶠ_new = ones(N, T)
 
-    # Backward sweep: U̇[:,t] uses freshly-computed U̇[:,t+1] rather than stale values
+    # Backward iterate
     for t in T-1:-1:1
 
         Πᵈ_t = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
@@ -221,6 +220,60 @@ function UpdateChanges(Transit::TransitSoln, μ̇::Vector{T1}; p::Parameters = P
 
     return TransitSoln(Transit.Wᵈ, Transit.Wᶠ, Transit.Lᵈ, Transit.Lᶠ, U̇ᵈ_new, U̇ᶠ_new, Transit.Πᵈ, Transit.Πᶠ, Transit.T)
 
+end
+
+"""
+Update the Û's
+"""
+function UpdateChanges_CF(μ̂::Vector{T1}; CF::TransitSoln, Baseline::TransitSoln, p::Parameters) where {T1 <: Real}
+
+    (; N, Πᵈ₋, Πᶠ₋, β, νᵈ, νᶠ) = p
+    (; T, Πᵈ, Πᶠ, Wᵈ, Wᶠ, U̇ᵈ, U̇ᶠ) = Baseline
+    Π̃ᵈ, Π̃ᶠ, W̃ᵈ, W̃ᶠ = CF.Πᵈ, CF.Πᶠ, CF.Wᵈ, CF.Wᶠ
+
+    # Same boundary condition for the Û's holds as in the sequential equilibrum
+    Ûᵈ_new, Ûᶠ_new = ones(N, T), ones(N, T)
+
+    # Calculate proportional time changes from the baseline equilibrium
+    Π̇ᵈ, Π̇ᶠ = [t == 1 ? Πᵈ[l, lp, t] / Πᵈ₋[l,lp] : Πᵈ[l,lp,t] / Πᵈ[l,lp,t-1] for l in 1:N, lp in 1:N, t in 1:T-1],
+             [t == 1 ? Πᶠ[l, lp, t] / Πᶠ₋[l,lp] : Πᶠ[l,lp,t] / Πᶠ[l,lp,t-1] for l in 1:N, lp in 1:N, t in 1:T-1]
+
+    # Get lags of migration rates
+    Π̃ᵈ_lag, Π̃ᶠ_lag = [t == 1 ? Πᵈ₋[l, lp] : Π̃ᵈ[l, lp, t - 1]  for l in 1:N, lp in 1:N, t in 1:T-1],
+                     [t == 1 ? Πᶠ₋[l, lp] : Π̃ᶠ[l, lp, t - 1]  for l in 1:N, lp in 1:N, t in 1:T-1]
+
+    # Backward iteration to calculate Û
+    for t in T-1:-1:1
+
+        for l in 1:N
+            
+            sum_d, sum_f = 0., 0.
+
+            for lp in 1:N
+
+                cost_change = l == N && lp < N ? μ̂[t] : 1.
+                sum_d += Ûᵈ_new[lp, t+1]^(β/νᵈ) * cost_change^(-1/νᵈ) * Π̇ᵈ[l,lp, t] * Π̃ᵈ_lag[l,lp,t]
+                sum_f += Ûᶠ_new[lp, t+1]^(β/νᶠ) * cost_change^(-1/νᶠ) * Π̇ᶠ[l,lp, t] * Π̃ᶠ_lag[l,lp,t]
+
+            end
+
+            ẇᵈ = t == 1 ? 1.0 : Wᵈ[l, t] / Wᵈ[l, t-1]
+            ẇ̃ᵈ = t == 1 ? 1.0 : W̃ᵈ[l, t] / W̃ᵈ[l, t-1]
+            ẇᶠ = t == 1 ? 1.0 : Wᶠ[l, t] / Wᶠ[l, t-1]
+            ẇ̃ᶠ = t == 1 ? 1.0 : W̃ᶠ[l, t] / W̃ᶠ[l, t-1]
+            ŵᵈ, ŵᶠ = ẇ̃ᵈ / ẇᵈ, ẇ̃ᶠ / ẇᶠ
+
+            Ûᵈ_new[l, t] = ŵᵈ * sum_d^νᵈ
+            Ûᶠ_new[l, t] = ŵᶠ * sum_f^νᶠ
+
+        end
+
+    end
+
+    U̇̃ᵈ_new, U̇̃ᶠ_new = Ûᵈ_new .* U̇ᵈ, Ûᶠ_new .* U̇ᶠ
+
+    return TransitSoln(CF.Wᵈ, CF.Wᶠ, CF.Lᵈ, CF.Lᶠ, U̇̃ᵈ_new, U̇̃ᶠ_new, CF.Πᵈ, CF.Πᶠ, CF.T)
+    
 end
 
 """
@@ -275,6 +328,71 @@ function UpdateProbabilities(Transit::TransitSoln, μ̇::Vector{T1}; p::Paramete
     end
 
     return TransitSoln(Transit.Wᵈ, Transit.Wᶠ, Transit.Lᵈ, Transit.Lᶠ, Transit.U̇ᵈ, Transit.U̇ᶠ, Πᵈ_new, Πᶠ_new, Transit.T)
+
+end
+
+"""
+Update probabilities for the counterfactual solver.
+"""
+function UpdateProbabilities_CF(μ̂::Vector{T1}; CF::TransitSoln, Baseline::TransitSoln, p::Parameters) where{T1 <: Real}
+
+    (; Πᵈ₋, Πᶠ₋, β, νᵈ, νᶠ, N) = p
+    (; Πᵈ, Πᶠ, U̇ᶠ, U̇ᵈ, T)   = Baseline
+    Π̃ᵈ, Π̃ᶠ, U̇̃ᵈ, U̇̃ᶠ       = CF.Πᵈ, CF.Πᶠ, CF.U̇ᵈ, CF.U̇ᶠ
+
+    # Initialize what we are trying to calculate
+    Π̃ᵈ_new, Π̃ᶠ_new = copy(Π̃ᵈ), copy(Π̃ᶠ)
+
+    # Compute u-hats implied by the two equilibria
+    Ûᵈ, Ûᶠ = U̇̃ᵈ ./ U̇ᵈ, U̇̃ᶠ ./ U̇ᶠ
+
+    # Compute the leads of u hat
+    Ûᵈ_lead, Ûᶠ_lead = reverse([Ûᵈ[l,t+1] for l in 1:N, t in T-1:-1:1], dims = 2),
+                       reverse([Ûᶠ[l,t+1] for l in 1:N, t in T-1:-1:1], dims = 2)
+
+    # Get lags of migration rates
+    Π̃ᵈ_lag, Π̃ᶠ_lag = [t == 1 ? Πᵈ₋[l, lp] : Π̃ᵈ[l, lp, t - 1]  for l in 1:N, lp in 1:N, t in 1:T-1],
+                     [t == 1 ? Πᶠ₋[l, lp] : Π̃ᶠ[l, lp, t - 1]  for l in 1:N, lp in 1:N, t in 1:T-1]
+
+    # Calculate proportional time changes from the baseline equilibrium
+    Π̇ᵈ, Π̇ᶠ = [t == 1 ? Πᵈ[l, lp, t] / Πᵈ₋[l,lp] : Πᵈ[l,lp,t] / Πᵈ[l,lp,t-1] for l in 1:N, lp in 1:N, t in 1:T-1],
+             [t == 1 ? Πᶠ[l, lp, t] / Πᶠ₋[l,lp] : Πᶠ[l,lp,t] / Πᶠ[l,lp,t-1] for l in 1:N, lp in 1:N, t in 1:T-1]
+
+    # Calculate denominator and migration rates from each origin
+    Denomᵈ, Denomᶠ = zeros(N, T - 1), zeros(N, T - 1)
+
+    for l in 1:N
+
+        for lp in 1:N
+
+            for t in 1:T - 1
+
+                cost_change = l == N && lp != N ? μ̂[t] : 1.
+                Denomᵈ[l,t] += Ûᵈ_lead[lp,t]^(β/νᵈ) * (cost_change)^(-1/νᵈ) * Π̃ᵈ_lag[l,lp, t] * Π̇ᵈ[l,lp, t]
+                Denomᶠ[l,t] += Ûᶠ_lead[lp,t]^(β/νᶠ) * (cost_change)^(-1/νᶠ) * Π̃ᶠ_lag[l,lp, t] * Π̇ᶠ[l,lp, t]
+
+            end
+
+        end
+
+    end
+
+    # Calculate counterfactual migration rates
+    for l in 1:N
+
+        for lp in 1:N
+
+            for t in 1:T-1
+
+                cost_change = l == N && lp != N ? μ̂[t] : 1.
+                Π̃ᵈ_new[l,lp,t] = (Ûᵈ_lead[lp, t]^(β/νᵈ) * (cost_change)^(-1/νᵈ) / Denomᵈ[l,t]) * Π̇ᵈ[l,lp, t] * Π̃ᵈ_lag[l,lp,t]
+                Π̃ᶠ_new[l,lp,t] = (Ûᶠ_lead[lp, t]^(β/νᶠ) * (cost_change)^(-1/νᶠ) / Denomᶠ[l,t]) * Π̇ᶠ[l,lp, t] * Π̃ᶠ_lag[l,lp,t]
+
+            end
+        end
+    end
+
+    return TransitSoln(CF.Wᵈ, CF.Wᶠ, CF.Lᵈ, CF.Lᶠ, CF.U̇ᵈ, CF.U̇ᶠ, Π̃ᵈ_new, Π̃ᶠ_new, CF.T)
 
 end
 
@@ -420,6 +538,44 @@ function SolveSeqEq(μ̇_path::Function; p::Parameters = Params1, outer_tol::T1 
 
     return Soln
 
+end
+
+"""
+Given a path for μ̂, solve for a counterfactual relative to a given baseline
+"""
+function Solve_CF(μ̂::Vector{T1}; Baseline::TransitSoln, p::Parameters, CF_tol::T1 = 1e-4, CF_maxiter::T2 = 2_000) where{T1 <: Real, T2 <: Int}
+
+    (; U̇ᶠ, U̇ᵈ) = Baseline
+    CF = deepcopy(Baseline)
+
+    err, prev_err, iter = 1 + CF_tol, Inf, 0
+    α = 0.5
+    while err > CF_tol && iter < CF_maxiter
+
+        Ûᵈ_prev, Ûᶠ_prev = CF.U̇ᵈ ./ U̇ᵈ, CF.U̇ᶠ ./ U̇ᶠ
+        
+        # Get the updated U̇'s
+        CF = UpdateProbabilities_CF(μ̂; Baseline = Baseline, CF = CF, p = p)
+        CF = UpdateSupplies(CF; p = p)
+        CF = TempEqSolve(CF; p = p, verbose = iter % 100 == 0)
+        CF = UpdateChanges_CF(μ̂; CF = CF, Baseline = Baseline, p = p)
+
+        # Calculate the updated Û and the associated error
+        Ûᵈ_new, Ûᶠ_new = CF.U̇ᵈ ./ U̇ᵈ, CF.U̇ᶠ ./ U̇ᶠ
+        err = max(maximum(abs.(Ûᵈ_new .- Ûᵈ_prev)), maximum(abs.(Ûᶠ_new .- Ûᶠ_prev)))
+        α         = err > prev_err ? max(α * 0.5, 0.01) : min(α * 1.01, 0.9)
+        Ûᵈ_new, Ûᶠ_new = α .* Ûᵈ_new .+ (1 - α) .* Ûᵈ_prev, α .* Ûᶠ_new .+ (1 - α) .* Ûᶠ_prev
+        CF = TransitSoln(CF.Wᵈ, CF.Wᶠ, CF.Lᵈ, CF.Lᶠ, Ûᵈ_new .* U̇ᵈ, Ûᶠ_new .* U̇ᶠ, CF.Πᵈ, CF.Πᶠ, CF.T)
+        prev_err = err
+        iter += 1
+
+        if iter % 50 == 0
+                println("****************** ITERATION $iter COMPLETE: CF_err = $err (α = $α) *************************")
+        end
+
+    end
+
+    return CF
 end
 
 #================================================================
