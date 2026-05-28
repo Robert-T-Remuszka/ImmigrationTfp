@@ -33,7 +33,10 @@ program PreRegProcessing
         
         loc region = subinstr("`v'", "1990", "", 1)
 
-        if "`region'" != "US" gen s_`region'_1990 = `v' / emp1990
+        if "`region'" != "US" {
+            gen s_`region'_1990 = `v' / emp1990
+            replace s_`region'_1990 = 0 if mi(s_`region'_1990)
+        }
 
     }
 
