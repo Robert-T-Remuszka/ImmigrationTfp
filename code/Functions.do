@@ -111,7 +111,7 @@ Estimate the reponse of y to the impulse given in the option impulse.
 *************************************************************************************************************************************************************/
 program EstimateIRF
 
-    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(integer 0) ///
+    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(string) ///
     horizon(integer 9) absorb(varlist) wt(string) framename(string) suffix(string) samp(string) se_spec(string)] impulse(varname)
 
     * Create a place to store the results
@@ -126,8 +126,7 @@ program EstimateIRF
 
     * Create long differences of the dependent variable
     forvalues h = 0/`horizon' {
-        loc operator = "Delta`h'"
-        bys statefip (year): gen `operator'`1' = log(`1'[_n + `h'] / `1'[_n - 1])
+        bys statefip (year): gen Delta`h'`1' = log(`1'[_n + `h'] / `1'[_n - 1])
     }
 
     * Absorb fixed effects
@@ -137,7 +136,7 @@ program EstimateIRF
     }
 
     * Logs of lhs levels
-    gen log`1' = log(`1')
+    //gen log`1' = log(`1')
 
     * Loop through and estimate the LP at each horizon
     forvalues h = 0/`horizon' {
@@ -145,20 +144,17 @@ program EstimateIRF
         * Need `horizon' local to call the correct dependent variables in the regression
         loc horizon = "F" + string(abs(`h'))
 
-        * Construct a local to store lags of the dependent variable (in first diff)
-        if `depvarlags' > 0 loc yvarlags l(1/`depvarlags').d.log`1'
-
         * Let the user know what is going on
         di "***********************************************************************************************************"
             di "Dep Var     : `1'_`horizon'"
-            di "Exog.  RHS  : `yvarlags' `exogenous' "
+            di "Exog.  RHS  : `depvarlags' `exogenous' "
             di "Endog. RHS  : `endogenous'"
             di "Absorbed    : `absorb'"
         di "***********************************************************************************************************"
         
         * Run the regression and save results in the provided frame
         sort state year
-        qui ivreg2 Delta`h'`1' (`endogenous' = `instruments') `exogenous' `yvarlags' `fes' [pw = `wt'] if `samp', `se_spec'
+        qui ivreg2 Delta`h'`1' (`endogenous' = `instruments') `exogenous' `depvarlags' `fes' [pw = `wt'] if `samp', `se_spec'
 
         * Record the results in the Estimates frame
         frame `framename' {
@@ -174,6 +170,6 @@ program EstimateIRF
     }
 
     drop Delta*
-    drop log`1'
+    //drop log`1'
 
 end
