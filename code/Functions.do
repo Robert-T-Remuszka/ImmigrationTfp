@@ -111,7 +111,7 @@ Estimate the reponse of y to the impulse given in the option impulse.
 *************************************************************************************************************************************************************/
 program EstimateIRF
 
-    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(string) ///
+    syntax namelist(max = 1) [, endogenous(varlist ts) instruments(varlist ts) exogenous(varlist ts) depvarlags(varlist ts) ///
     horizon(integer 9) absorb(varlist) wt(string) framename(string) suffix(string) samp(string) se_spec(string)] impulse(varname)
 
     * Create a place to store the results
@@ -134,9 +134,6 @@ program EstimateIRF
     foreach v in `absorb' {
         loc fes "`fes' i.`v'"
     }
-
-    * Logs of lhs levels
-    //gen log`1' = log(`1')
 
     * Loop through and estimate the LP at each horizon
     forvalues h = 0/`horizon' {
@@ -170,6 +167,5 @@ program EstimateIRF
     }
 
     drop Delta*
-    //drop log`1'
 
 end
