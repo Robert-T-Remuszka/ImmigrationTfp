@@ -26,18 +26,19 @@ forvalues h = 0/`horizon' {
 }
 
 * Generate lags
-loc depvarlags 4
 loc migflowlags 4
+loc BartikLags  4
 
-gen logZ = log(Z)
 loc controls ""
-forvalues lag = 1/`migflowlags' { // lags of migration rates
+forv lag = 1/`migflowlags' { // lags of migration rates
     gen L`lag'_fg = L`lag'.fg
     loc controls "`controls' L`lag'_fg"
 }
-forvalues lag = 1/`depvarlags' { // depvar lags
-    gen L`lag'_D_logZ = L`lag'.D.logZ
-    loc controls "`controls' L`lag'_D_logZ"
+forv lag = 1/`BartikLags' { // lags of the instrument
+
+    gen L`lag'_Bartik1990 = L`lag'.Bartik_1990
+    loc controls "`controls' L`lag'_Bartik1990"
+
 }
 
 
@@ -52,6 +53,7 @@ forvalues s = 2/51 {
 Loop through each horizon and each variable. Store the results
 in dataframe Rotemberg
 ************************************************************/
+loc depvarlags  4
 xtset state year
 sort state year
 frame create Rotemberg_appended
@@ -64,7 +66,13 @@ loc sampstart = max(`depvarlags', `migflowlags') + 1995
 
 foreach v in `vars' {
 
-    
+    gen log`v' = log(`v')
+    * Generate lags of the dependent var
+    loc laggeddep ""
+    forv lag = 1/`depvarlags' { // depvar lags
+        gen L`lag'_D_`v' = L`lag'.D.log`v'
+        loc laggeddep "`laggeddep' L`lag'_D_`v'"
+    }
     
     forvalues h = 0 / `horizon' {
 
@@ -103,7 +111,7 @@ foreach v in `vars' {
         * Save the output to a matrix then a data frame
         preserve
             keep if inrange(year,`sampstart', `sampend')
-            qui bartik_weight, y(Delta`h'`v') x(fg) z(t_**_s_**_1990) weightstub(t_**_fg_*) controls(`controls' tfe_* sfe_*) weight_var(emp)
+            qui bartik_weight, y(Delta`h'`v') x(fg) z(t_**_s_**_1990) weightstub(t_**_fg_*) controls(`controls' `laggeddep' tfe_* sfe_*) weight_var(emp)
         restore
 
         mat beta = r(beta)
@@ -151,11 +159,70 @@ foreach v in `vars' {
 /**************************
         SUMMARY TABLE
 ***************************/
-rtr
+
 frame Rotemberg_appended {
 
-    collapse (sum) alpha (mean) beta1 gamma1 pi1, by(Variable Horizon group)
-
+    destring year, replace
+    gen beta2 = alpha1 * beta1
+    collapse (sum) alpha1, by(Variable group Horizon)
+    
 }
 
+frame change Rotemberg_appended
 
+/**************************
+    ROTEMBERG WEIGHTS TABLE
+***************************/
+
+capture program drop post_alpha
+program define post_alpha, eclass
+    args b V
+    ereturn post `b' `V', obs(1)
+    ereturn local cmd "tabstat"
+end
+
+* Order groups by decreasing alpha (Wage_Domestic, h=0 as reference)
+preserve
+    keep if Variable == "Wage_Domestic" & Horizon == 0
+    gsort -alpha1
+    local groups ""
+    forvalues i = 1/`=_N' {
+        local groups "`groups' `=group[`i']'"
+    }
+restore
+local ngroups : word count `groups'
+
+eststo clear
+
+foreach v in Wage_Domestic Wage_Foreign Z {
+    foreach h in 0 9 {
+
+        matrix b = J(1, `ngroups', .)
+        matrix V = J(`ngroups', `ngroups', 0)
+        matrix colnames b = `groups'
+        matrix rownames V = `groups'
+        matrix colnames V = `groups'
+
+        local i = 1
+        foreach g in `groups' {
+            qui sum alpha1 if Variable == "`v'" & Horizon == `h' & group == "`g'"
+            matrix b[1, `i'] = r(mean)
+            local ++i
+        }
+
+        post_alpha b V
+        eststo m_`v'_`h'
+    }
+}
+
+esttab m_Wage_Domestic_0 m_Wage_Domestic_9 ///
+       m_Wage_Foreign_0  m_Wage_Foreign_9  ///
+       m_Z_0             m_Z_9             ///
+    using "${Tables}/Rotemberg_alphas.tex", replace ///
+    booktabs nostar nose not noobs nonumber ///
+    mgroups("Domestic Wage" "Foreign Wage" "Productivity", pattern(1 0 1 0 1 0) ///
+        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
+    mlabels("\$h=0\$" "\$h=9\$" "\$h=0\$" "\$h=9\$" "\$h=0\$" "\$h=9\$") ///
+    coeflabels(LA "Latin America" WestEu "Western EU" AsiaOther "Asia Other" ///
+               CaAuNz "Can., Aus. and Nzl." EastEu "Eastern EU") ///
+    b(%9.3f)
