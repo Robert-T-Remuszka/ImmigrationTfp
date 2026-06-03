@@ -2,6 +2,7 @@
 File Paths
 ========#
 data = joinpath(@__DIR__, "..", "..","data");
+graphs = joinpath(@__DIR__, "..","..","output/graphs")
 
 #====
 Some other useful Global objects to have
