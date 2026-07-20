@@ -1,159 +1,122 @@
 """
-Parameters of the auxilliary model for TFP. I call this an auxilliary model because
-it could be repeated on model-simulated data.
+Use the expm1() function to write ω̄ᵖ - 1 where p is some power. This function is much
+more stable computationally. Further, its derivatives can be smoothly approximated using the Taylor Series
+for the exponential in neighborhoods where y → 0.
 """
-struct AuxParameters{T1 <: Real}
-
-    ρ::T1                                       # CES parameter
-    θ::T1                                       # Capital share
-    γᶠ::T1                                      # Comp advantage - foreign
-    Δ::T1                                       # γᵈ = γᶠ + Δ
-    Γ::T1                                       # Comp advantage - level shifter
-    αᶠ::T1                                      # Absolute advantage - foreign
-    αᵈ::T1                                      # Absolute advantage - domestic
-    ι::T1                                       # Intercept of production function
-    ιₛ::Vector{T1}                               # State fixed effects
-    ιₜ::Vector{T1}                               # Time fixed effects
-    
-end
-
-"""
-Constructor for the AuxParameters type.
-"""
-function AuxParameters(;
-    ρ::T1  = 0.20,
-    θ::T1  = 0.50,
-    γᶠ::T1 = 2.,
-    Δ::T1  = 4.,
-    Γ::T1  = -3.,
-    αᶠ::T1 = 2.,
-    αᵈ::T1 = 4.,
-    ι::T1  = -4.,
-    df::DataFrame   = StateAnalysis,
-    N::Int          = length(unique(df[:, :statefip])),
-    T::Int          = length(unique(df[:, :year])),
-    ιₛ::Vector{T1} = ones(N),
-    ιₜ::Vector{T1} = ones(T)
-    ) where{T1 <: Real}                
-    
-    return AuxParameters{T1}(ρ, θ, γᶠ, Δ, Γ, αᶠ, αᵈ, ι, ιₛ, ιₜ)
-
-end
- 
-"""
-Compute parts of the reduced form production function for given parameters p.
-"""
-function ComputeReduced(wᶠ::T1, wᵈ::T1, F::T1, D::T1; p::AuxParameters) where {T1 <: Real}
-    
-    (; ρ, γᶠ, Δ, Γ, αᶠ, αᵈ) = p
-
-    b, γᵈ  = ρ / (1 - ρ), γᶠ + Δ
-    bᶠ, bᵈ, b_gamma = γᶠ * b, γᵈ * b, Γ * b
-    Eω_high = ((1 - ρ) * Δ) / ((1 - ρ) * Δ - ρ * γᵈ)  # E[ω^(ργᵈ/((1-ρ)Δ))]
-    Eω_low = (1 - ρ) / (1 - 2ρ)                        # E[ω^(ρ/(1-ρ))]
-    w = wᵈ / wᶠ
-    α = αᶠ / αᵈ
-    Z = max(
-        (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * Eω_high - Eω_low) + 
-        exp(b_gamma) * (1/bᵈ) * (exp(bᵈ) - (α * w / exp(Γ))^(bᵈ / Δ) * Eω_high)
-        , 1e-4)^(1 / b)
-    λ = clamp( (1/bᶠ) * ((α * w / exp(Γ))^(bᶠ/Δ) * Eω_high - Eω_low) / Z^b, 0. , 1.)
-    L = (λ^(1 - ρ) * (αᶠ * F)^ρ + (1 - λ)^(1 - ρ) * (αᵈ * D)^ρ)^(1/ρ)
-
-    return (; Z, λ, L)
-
-end
-
-"""
-Compute residual sum of suares for a set of parameters p.
-"""
-function RSS(x::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
-    
-    # Ensure the data is sorted correctly - Matters for fixed effects
-    df_sort = @chain df begin
-        @arrange(statefip, year)
+function stable_expm1_ratio(y)
+    ay = y isa ForwardDiff.Dual ? abs(ForwardDiff.value(y)) : abs(y)
+    if ay < 1e-5
+        return 1 + y/2 + y^2/6 + y^3/24 + y^4/120
+    else
+        return expm1(y) / y
     end
-
-    N, T = length(unique(df_sort[:, :statefip])), length(unique(df_sort[:, :year]))
-
-    # Package the input vector into instance of AuxParameters. A leading zero is placed in front fixed effect vecors
-    # since I include an intercept.
-    p = AuxParameters(
-        ρ   = x[1],
-        θ   = x[2], 
-        γᶠ  = x[3], 
-        Δ   = x[4], 
-        Γ   = x[5], 
-        αᶠ  = x[6], 
-        αᵈ  = x[7],
-        ι   = x[8], 
-        ιₛ = vcat(0., x[9 : 7 + N]),
-        ιₜ = vcat(0., x[8 + N : end]),
-        df  = df_sort
-    )
-
-        
-    # Unpack some necessary parameters
-    (; ι, θ, ιₛ, ιₜ) = p
-    state_indices = repeat(1:N, inner=T)  # [1,1,...,1, 2,2,...,2, ..., N,N,...,N]
-    time_indices = repeat(1:T, outer=N)   # [1,2,...,T, 1,2,...,T, ..., 1,2,...,T]
-    state_fe = ιₛ[state_indices]
-    time_fe = ιₜ[time_indices]
-
-    # Fetch some data for estimation
-    Y, K         = df_sort[:, :GDP], df_sort[:, :CapStock]
-    wᶠ, wᵈ, F, D = df_sort[:, :Wage_Foreign], df_sort[:, :Wage_Domestic], df_sort[:, :Supply_Foreign], df_sort[:, :Supply_Domestic]
-
-    # Broadcastisting ComputeReduced returns a vector of named tuples, so we need to broadcast the getproperty function
-    # getproperty is the basic function for which '.' notation is a shorthand, but . is also a shorthand for broadcasting!
-    Z, L = getproperty.(ComputeReduced.(wᶠ, wᵈ, F, D; p = p), :Z), getproperty.(ComputeReduced.(wᶠ, wᵈ, F, D; p = p), :L)
-    res  = log.(Y) - (ι .+  state_fe .+  time_fe .+ θ * log.(K) + (1 - θ) * log.(Z .* L))
-
-    return dot(res, res)
-
 end
 
 """
-Estimate production function by minimizing residual sum of squares. Initial guess is x0.
+Foreign-born integral (document's Integral 1): I_F = w^(-b)[D + m/(1-b)] where
+D := m(1-m^(a-1))/(a-1), stabilized via stable_expm1_ratio at the a=1 knife edge.
 """
-function EstimateProdFunc(x0::Vector{T1}; df::DataFrame = StateAnalysis) where {T1 <: Real}
+function I_F_μ(ρ, γ, μ, w)
 
-    obj(x) = RSS(x; df = df)
-    opts   = Optim.Options(
-        show_trace = true, 
-        show_every = 50,
-        f_tol = 1e-8,        # Function tolerance
-        x_tol = 1e-8,        # Parameter tolerance
-        g_tol = 1e-6,  
-        iterations = 100000   # Allow many more iterations
-    )
-    N, T   = length(unique(df[:, :statefip])), length(unique(df[:, :year]))
-    
-    lb, ub = zeros(length(x0)), zeros(length(x0))
-    lb[1] = 0.01          # ρ > 0
-    ub[1] = 0.49          # ρ < 1/2 ensures finite moments
-    lb[2] = 1e-2          # θ > 0
-    ub[2] = 1. - 1e-2     # θ < 1
-    lb[3] = 1e-3          # γᶠ > 0
-    ub[3] = Inf
-    lb[4] = 1e-1          # Δ > 0
-    ub[4] = Inf
-    lb[5] = -Inf          # Γ unbounded
-    ub[5] =  Inf
-    lb[6] =  1e-2         # αᶠ > 0
-    ub[6] =  Inf
-    lb[7] =  1e-2         # αᵈ > 0
-    ub[7] =  Inf
-    lb[8] = -Inf          # ι unbounded
-    ub[8] =  Inf
-    lb[9 : 7 + N] .= -Inf  # ιₛ unbounded
-    ub[9 : 7 + N] .=  Inf
-    lb[8 + N : end] .= -Inf # ιₜ unbounded
-    ub[8 + N : end] .=  Inf
+    b = ρ / (1 - ρ)
+    a = 1/γ + b
+    m = μ * w
+    lnm = log(m)
+    y = (a - 1) * lnm
 
-    result = optimize(obj, lb, ub, x0, Fminbox(NelderMead()), opts)
-    MSE    =  result.minimum / (N * T)
+    D = -m * lnm * stable_expm1_ratio(y)
 
-    return (; result.minimizer, MSE)
+    return w^(-b) * (D + m / (1 - b))
+end
 
+"""
+Domestic-born integral: I_D = [1 - m - D] / (1+γb), same D as I_F_μ.
+"""
+function I_D_μ(ρ, γ, μ, w)
+
+    b = ρ / (1 - ρ)
+    a = 1/γ + b
+    m = μ * w
+    lnm = log(m)
+    y = (a - 1) * lnm
+
+    D = -m * lnm * stable_expm1_ratio(y)
+
+    return (1 - m - D) / (1 + γ * b)
+end
+
+"""
+Task productivity aggregate Z and foreign-born task share λ, free-μ parameterization.
+"""
+function TaskAggregates_μ(ρ, γ, μ, w)
+
+    b = ρ / (1 - ρ)
+    F = I_F_μ(ρ, γ, μ, w)
+    D = I_D_μ(ρ, γ, μ, w)
+
+    Z = (F + D)^(1 / b)
+    λ = F / (F + D)
+
+    return (; Z, λ)
+end
+
+"""
+CES aggregate of foreign and domestic labor supplies given the foreign-born task share λ.
+"""
+function LaborAggregate(λ, ρ, LF, LD)
+
+    return (λ^(1 - ρ) * LF^ρ + (1 - λ)^(1 - ρ) * LD^ρ)^(1 / ρ)
+end
+
+"""
+Sum of squared residuals for equation for production function (eqn 4.2 of the text)
+    - Time FEs ι_t, first year normalized to 0, ι is the intercept
+    - μ is the minimum of the Pareto
+    - θ is the capital share
+    - ρ controls the EOS between domestic and foreign
+
+    x = [ι, θ, μ, γ, ρ, ιₜ_2,...,ιₜ_T];
+
+    time_id maps each observation to an index into ιₜ (1..T).
+    Returns Inf if 1 ≤ρ/(1-ρ) (violates the Pareto tail-moment condition, under which
+    Z's defining integral fails to converge)
+"""
+function RSS(x::AbstractVector, time_id::AbstractVector{<:Integer}, T::Integer,
+             Y, K, wD, wF, LF, LD)
+
+    ι, θ, μ, γ, ρ = x[1], x[2], x[3], x[4], x[5]
+    ιₜ = vcat(zero(ι), x[6:4+T])
+    b = ρ / (1 - ρ)
+    b < 1 || return oftype(ρ, Inf)
+
+    w = wD ./ wF
+    ta = TaskAggregates_μ.(ρ, γ, μ, w)
+    Z = getproperty.(ta, :Z)
+    λ = getproperty.(ta, :λ)
+    L = LaborAggregate.(λ, ρ, LF, LD)
+
+    ŷ = ι .+ ιₜ[time_id] .+ θ .* log.(K) .+ (1 - θ) .* (log.(Z) .+ log.(L))
+    res = log.(Y) .- ŷ
+
+    return sum(abs2, res)
+end
+
+"""
+Estimate the production function via Fminbox(LBFGS) directly on x = [ι, θ, μ, γ, ρ,
+ιₜ_2,...,ιₜ_T], with time fixed effects.
+"""
+function EstimateProdFunc(x0::AbstractVector, lb::AbstractVector, ub::AbstractVector,
+                           time_id::AbstractVector{<:Integer}, T::Integer,
+                           Y, K, wD, wF, LF, LD; iterations = 1000, show_trace = false, g_tol = 1e-8)
+
+    obj(x) = RSS(x, time_id, T, Y, K, wD, wF, LF, LD)
+    opts = Optim.Options(iterations = iterations, show_trace = show_trace, g_tol = g_tol)
+
+    result = Optim.optimize(obj, lb, ub, x0, Optim.Fminbox(Optim.LBFGS()), opts; autodiff = :forward)
+
+    xhat = Optim.minimizer(result)
+    ι, θ, μ, γ, ρ = xhat[1], xhat[2], xhat[3], xhat[4], xhat[5]
+    ιₜ = vcat(zero(ι), xhat[6:4+T])
+
+    return (; result, ι, θ, μ, γ, ρ, ιₜ)
 end
