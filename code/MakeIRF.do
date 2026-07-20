@@ -15,7 +15,7 @@ loc depvarlags 4
 loc ivlags     4
 
 * Generate macro containing first-differenced variables
-loc vars "Z Wage_Domestic Wage_Foreign L CapStock"
+loc vars "Z Wage_Domestic Wage_Foreign L"
 foreach v in `vars' {
     
     gen D0`v' = ln(`v' / L.`v')
@@ -38,9 +38,6 @@ framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(d
 EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year state) wt(emp) impulse(fg) ///
 framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/`ivlags').Bartik_1990)
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0CapStock fg)) absorb(year state) wt(emp) impulse(fg) ///
-framename(CapStock_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/`ivlags').Bartik_1990)
-
 * Look at the LOO Bartik
 EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Z fg)) absorb(year state) wt(emp) impulse(fg) ///
 framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/`ivlags').Bartik_1990_LOO)
@@ -54,17 +51,14 @@ framename(Wage_Domestic_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) s
 EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year state) wt(emp) impulse(fg) ///
 framename(L_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/`ivlags').Bartik_1990_LOO)
 
-EstimateIRF CapStock , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0CapStock fg)) absorb(year state) wt(emp) impulse(fg) ///
-framename(CapStock_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(dkraay(`dkraayband') partial(i.year i.state)) exogenous(L(1/`ivlags').Bartik_1990_LOO)
-
 /*****************************
             PLOTS
 *****************************/
 set graphics off
 
 loc suffixes "Iv1990 Iv1990_LOO"
-loc depvars "Z Wage_Foreign Wage_Domestic L CapStock"
-loc ylabs "Z" "w{sup:F}" "w{sup:D}" "L" "K"
+loc depvars "Z Wage_Foreign Wage_Domestic L"
+loc ylabs "Z" "w{sup:F}" "w{sup:D}" "L"
 loc counter = 1
 foreach v in `depvars' {
 
@@ -113,24 +107,24 @@ foreach v in `depvars' {
 set graphics on
 
 * Responses
-graph combine Z_Iv1990 L_Iv1990 Wage_Foreign_Iv1990 Wage_Domestic_Iv1990 CapStock_Iv1990, ///
-rows(3) cols(2) name(Responses_Iv1990)
+graph combine Z_Iv1990 L_Iv1990 Wage_Foreign_Iv1990 Wage_Domestic_Iv1990, ///
+rows(2) cols(2) name(Responses_Iv1990)
 
 graph export "${Graphs}/Responses_Iv1990.pdf", replace name(Responses_Iv1990)
 
-graph combine Z_Iv1990_LOO L_Iv1990_LOO Wage_Foreign_Iv1990_LOO Wage_Domestic_Iv1990_LOO CapStock_Iv1990_LOO, ///
-rows(3) cols(2) name(Responses_Iv1990_LOO)
+graph combine Z_Iv1990_LOO L_Iv1990_LOO Wage_Foreign_Iv1990_LOO Wage_Domestic_Iv1990_LOO, ///
+rows(2) cols(2) name(Responses_Iv1990_LOO)
 
 graph export "${Graphs}/Responses_Iv1990_LOO.pdf", replace name(Responses_Iv1990_LOO)
 
 * First Stages
-graph combine Z_Iv1990_F L_Iv1990_F Wage_Foreign_Iv1990_F Wage_Domestic_Iv1990_F CapStock_Iv1990_F, ///
-rows(3) cols(2) name(Responses_Iv1990_F)
+graph combine Z_Iv1990_F L_Iv1990_F Wage_Foreign_Iv1990_F Wage_Domestic_Iv1990_F, ///
+rows(2) cols(2) name(Responses_Iv1990_F)
 
 graph export "${Graphs}/Responses_Iv1990_F.pdf", replace name(Responses_Iv1990_F)
 
-graph combine Z_Iv1990_LOO_F L_Iv1990_LOO_F Wage_Foreign_Iv1990_LOO_F Wage_Domestic_Iv1990_LOO_F CapStock_Iv1990_LOO_F, ///
-rows(3) cols(2) name(Responses_Iv1990_LOO_F)
+graph combine Z_Iv1990_LOO_F L_Iv1990_LOO_F Wage_Foreign_Iv1990_LOO_F Wage_Domestic_Iv1990_LOO_F, ///
+rows(2) cols(2) name(Responses_Iv1990_LOO_F)
 
 graph export "${Graphs}/Responses_Iv1990_LOO_F.pdf", replace name(Responses_Iv1990_LOO_F)
 
