@@ -104,7 +104,7 @@ Estimate the reponse of y to the impulse given in the option impulse.
       if you do not specity any endogenous variables.
     - instruments gives an instrument for each endogenous variable (or multiple for overidentification). The order of instruments should correspond to the
       order which you specify the endogenous variables
-    - exogenous gives any exogenous controls we would like to include excluding lags of the dependent variable
+    - exogenous gives any exogenous controls we would like to include, excluding lags of the dependent variable
     - lagorderdepvar is used to include lags of the dependent variable
     - framename indicates the name of the frame created to stroe the results
     - colname tells the routine what to suffix the point estimate and se columns with
@@ -148,7 +148,7 @@ program EstimateIRF
             di "Endog. RHS  : `endogenous'"
             di "Absorbed    : `absorb'"
         di "***********************************************************************************************************"
-        
+
         * Run the regression and save results in the provided frame
         sort state year
         qui ivreg2 Delta`h'`1' (`endogenous' = `instruments') `exogenous' `depvarlags' `fes' [pw = `wt'] if `samp', `se_spec'
@@ -163,7 +163,7 @@ program EstimateIRF
             if "`endogenous'" != "" replace F_`suffix'    = `e(widstat)' if _n == _N
 
         }
-        
+
     }
 
     drop Delta*
