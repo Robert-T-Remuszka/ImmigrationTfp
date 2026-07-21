@@ -22,10 +22,10 @@ loc models ""
 loc vlabs ""
 
 * Regress the instrument on lags of endogenous migration flows
-loc maxlagtest 4
+loc maxlagtest 3
 foreach lag of numlist 1/`maxlagtest' {
     
-    eststo m`lag': qui ivreg2 `instrument' l(1/`lag').fg i.year i.state [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year i.state)
+    eststo m`lag': qui ivreg2 `instrument' l(1/`lag').fg i.year [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year)
     
     loc models "`models' m`lag'"
     if `lag' > 1 loc vlabs `vlabs' L`lag'.fg  "Lag `lag' of migration flow"
@@ -38,6 +38,6 @@ la var fg "Lag 0 of migration flow"
 esttab `models' using "${Tables}/Lag_exog.tex", replace booktabs varlabels(`vlabs') se label ///
 stats(N r2_a, fmt(%6.0fc %9.3f %9.3f)) nonum ///
 subs("Standard errors in parentheses" ///
-"Driscoll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions include state and year fixed effects." ///
-"N" "Observations" "r2_a" "Adj. \$R^2$") star(* 0.1 ** 0.05 *** 0.01) keep(L.fg L2.fg L3.fg L4.fg)
+"Driscoll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions include year fixed effects." ///
+"N" "Observations" "r2_a" "Adj. \$R^2$") star(* 0.1 ** 0.05 *** 0.01) keep(L.fg L2.fg L3.fg)
 
