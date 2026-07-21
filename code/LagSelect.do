@@ -6,14 +6,14 @@ do Functions
 use "${Data}/StateAnalysis.dta", clear
 qui PreRegProcessing
 sort state year
-loc highlight 1
+loc highlight 0
 
 /*********************************************************
     Estimate reduced form VAR equation by equation
 **********************************************************/
 loc maxlag 4
 loc sampstart = 1995 + `maxlag'
-loc vars "Z Wage_Domestic Wage_Foreign L CapStock fg"
+loc vars "Z Wage_Domestic Wage_Foreign L fg Supply_Domestic"
 loc K : word count `vars'
 loc dkraayband 9
 
@@ -23,16 +23,16 @@ forv p = 1/`maxlag' {
     loc rownames `"`rownames' "Lag `p'""'
 }
 matrix rownames BIC = `rownames' "N"
-matrix colnames BIC = "\$\Delta^0\ln Z_{l,t}\$" "\$\Delta^0\ln w^D_{l,t}\$" ///
-"\$\Delta^0\ln w^F_{l,t}\$" "\$\Delta^0\ln L_{l,t}\$" "\$\Delta^0\ln K_{l,t}\$" ///
-"\$\Delta^0\ln L^F_{l,t}\$"
+matrix colnames BIC = "\$\Delta^0\ln{Z_{l,t}}\$" "\$\Delta^0\ln{w^D_{l,t}}\$" ///
+"\$\Delta^0\ln{w^F_{l,t}}\$" "\$\Delta^0\ln{L_{l,t}}\$" "\$\Delta^0\ln{L^D_{l,t}}\$" ///
+"\$\Delta^0\ln{L^F_{l,t}}\$"
 
-/***** 
-Compute variables in the reduced form VAR representation - add them to a local
+/*****
+Generate variables in the reduced form VAR representation - add them to a local
 *****/
 loc vars_fd ""
 foreach v in `vars' {
-    
+
     if "`v'" != "fg" {
         gen D0`v' = ln(`v' / L.`v')
         loc vars_fd "`vars_fd' D0`v' "
@@ -48,14 +48,14 @@ Calculate BIC of a reduced form ARX model for each outcome variable.
 *****************/
 forv k = 1/`K' {
 
-    
+
     loc v: word `k' of `vars_fd'
-    
+
     forv p = 1/`maxlag' {
 
-        qui ivreg2 `v' L(1/`p').(`vars_fd') i.year i.state [pw = emp] if year >= `sampstart', ///
-        partial(i.year i.state)
-        
+        qui ivreg2 `v' L(1/`p').(`vars_fd') i.year [pw = emp] if year >= `sampstart', ///
+        partial(i.year)
+
         * Compute AIC for this model
         scalar bic = log(e(rss)/e(N)) + (log(e(N))/e(N)) * (`K' * `p' + 1)
 
@@ -87,6 +87,4 @@ if `highlight' {
 }
 
 esttab matrix(BIC, fmt(%9.3f)) using "${Tables}/LagSelect.tex", booktabs replace  ///
-    nomtitles substitute("N " "\midrule N " "`obs'.000" "`obs'" `highlight_subs') ///
-    addnotes("All regressions contain the indicated lags of all six variables shown in the column of this table.")
-
+    nomtitles substitute("N " "\midrule N " "`obs'.000" "`obs'" `highlight_subs')
