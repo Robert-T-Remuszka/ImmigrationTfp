@@ -52,6 +52,11 @@ println("ρ bounds (0.01,0.49): distance from lower = ", est.ρ - 0.01, ", from 
 println("μ·max_w: ", est.μ * max_w)
 println("ιₜ range: ", extrema(est.ιₜ))
 
+# %% Persist the estimate for downstream use (e.g. Solve_Baseline.jl)
+p_star = (ρ = est.ρ, θ = est.θ, γ = est.γ, μ = est.μ, ι = est.ι, ιₜ = est.ιₜ, years = years)
+jldsave(joinpath(@__DIR__, "ProductionFunction.jld2"); p_star)
+println("Saved p_star = ", p_star, " to ProductionFunction.jld2")
+
 # %% Z variation check
 println()
 println("=== Z variation ===")
