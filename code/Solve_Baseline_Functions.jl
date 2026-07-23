@@ -34,7 +34,7 @@ The baseline sequential equilibrium: wages, labor supplies, value changes and
 choice probabilities over a T-period horizon. Πᵈ, Πᶠ hold [π₀, π₁, …, π_{T-2}] — length T-1 —
 since a period-t choice probability governs the transition into period t+1.
 """
-struct BaselineSoln{T1 <: Real, T2 <: Integer}
+struct Soln{T1 <: Real, T2 <: Integer}
 
     Wᵈ::Matrix{T1}                              # Domestic wages (location × period)
     Wᶠ::Matrix{T1}                              # Foreign wages
@@ -167,10 +167,10 @@ dollar level via the differenced static system. TaskAggregates/LaborAggregate at
 period's "new" level rather than recomputed — period t's new level is period t+1's old level.
 The Rest-of-World wage (location N) is fixed exogenously.
 """
-function SolveTempEq(Soln::BaselineSoln; p::Parameters, verbose::Bool = false)
+function SolveTempEq(S::Soln; p::Parameters, verbose::Bool = false)
 
     (; N, ρ) = p
-    (; Wᵈ, Wᶠ, Lᵈ, Lᶠ, T) = Soln
+    (; Wᵈ, Wᶠ, Lᵈ, Lᶠ, T) = S
     Wᵈ_new, Wᶠ_new = copy(Wᵈ), copy(Wᶠ)
 
     for l in 1:N - 1
@@ -198,7 +198,7 @@ function SolveTempEq(Soln::BaselineSoln; p::Parameters, verbose::Bool = false)
 
     verbose && println("\tTemporary equilibrium solved for all locations and periods.")
 
-    return BaselineSoln(Wᵈ_new, Wᶠ_new, Soln.Lᵈ, Soln.Lᶠ, Soln.U̇ᵈ, Soln.U̇ᶠ, Soln.Πᵈ, Soln.Πᶠ, Soln.T)
+    return Soln(Wᵈ_new, Wᶠ_new, S.Lᵈ, S.Lᶠ, S.U̇ᵈ, S.U̇ᶠ, S.Πᵈ, S.Πᶠ, S.T)
 
 end
 
@@ -279,10 +279,10 @@ Update choice probabilities. Vectorized over (l, l') for each t: the
 numerator matrix is the lagged probability times the forward value change and cost-change
 terms, elementwise; rows are then normalized to sum to one.
 """
-function UpdateChoiceProbabilities(Soln::BaselineSoln, Ṁ::Vector; p::Parameters)
+function UpdateChoiceProbabilities(S::Soln, Ṁ::Vector; p::Parameters)
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
-    (; U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T) = Soln
+    (; U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T) = S
 
     Πᵈ_new, Πᶠ_new = copy(Πᵈ), copy(Πᶠ)
 
@@ -300,17 +300,17 @@ function UpdateChoiceProbabilities(Soln::BaselineSoln, Ṁ::Vector; p::Parameter
 
     end
 
-    return BaselineSoln(Soln.Wᵈ, Soln.Wᶠ, Soln.Lᵈ, Soln.Lᶠ, Soln.U̇ᵈ, Soln.U̇ᶠ, Πᵈ_new, Πᶠ_new, Soln.T)
+    return Soln(S.Wᵈ, S.Wᶠ, S.Lᵈ, S.Lᶠ, S.U̇ᵈ, S.U̇ᶠ, Πᵈ_new, Πᶠ_new, S.T)
 
 end
 
 """
 Update labor supplies, the factor-supply law of motion: Lₜ₊₁ = Πₜ' Lₜ.
 """
-function UpdateLaborSupply(Soln::BaselineSoln; p::Parameters)
+function UpdateLaborSupply(S::Soln; p::Parameters)
 
     (; N, Lᵈ₀, Lᶠ₀) = p
-    (; Πᵈ, Πᶠ, T) = Soln
+    (; Πᵈ, Πᶠ, T) = S
 
     Lᵈ_new, Lᶠ_new = zeros(N, T), zeros(N, T)
     Lᵈ_new[:, 1], Lᶠ_new[:, 1] = Lᵈ₀, Lᶠ₀
@@ -320,7 +320,7 @@ function UpdateLaborSupply(Soln::BaselineSoln; p::Parameters)
         Lᶠ_new[:, t + 1] = Πᶠ[:, :, t]' * Lᶠ_new[:, t]
     end
 
-    return BaselineSoln(Soln.Wᵈ, Soln.Wᶠ, Lᵈ_new, Lᶠ_new, Soln.U̇ᵈ, Soln.U̇ᶠ, Soln.Πᵈ, Soln.Πᶠ, Soln.T)
+    return Soln(S.Wᵈ, S.Wᶠ, Lᵈ_new, Lᶠ_new, S.U̇ᵈ, S.U̇ᶠ, S.Πᵈ, S.Πᶠ, S.T)
 
 end
 
@@ -330,10 +330,10 @@ U̇[:, T] = 1. Vectorized over l for each t: the inner sum over destinations l' 
 matrix-vector product of the (elementwise) lagged-probability/cost-change matrix against the
 forward value changes.
 """
-function UpdateValueChanges(Soln::BaselineSoln, Ṁ::Vector; p::Parameters)
+function UpdateValueChanges(S::Soln, Ṁ::Vector; p::Parameters)
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
-    (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, T) = Soln
+    (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, T) = S
 
     U̇ᵈ_new, U̇ᶠ_new = ones(N, T), ones(N, T)
 
@@ -354,7 +354,7 @@ function UpdateValueChanges(Soln::BaselineSoln, Ṁ::Vector; p::Parameters)
 
     end
 
-    return BaselineSoln(Soln.Wᵈ, Soln.Wᶠ, Soln.Lᵈ, Soln.Lᶠ, U̇ᵈ_new, U̇ᶠ_new, Soln.Πᵈ, Soln.Πᶠ, Soln.T)
+    return Soln(S.Wᵈ, S.Wᶠ, S.Lᵈ, S.Lᶠ, U̇ᵈ_new, U̇ᶠ_new, S.Πᵈ, S.Πᶠ, S.T)
 
 end
 
@@ -376,48 +376,48 @@ Take a damped convex combination of the newly updated U̇'s and their previous v
 adaptive step size α: shrink α when the residual grows, grow it (up to 0.9) when it shrinks.
 Returns the damped solution, the pre-damping residual, and the updated α.
 """
-function damped_update(Soln::BaselineSoln, U̇ᵈ_prev, U̇ᶠ_prev, α::Real, prev_err::Real)
+function damped_update(S::Soln, U̇ᵈ_prev, U̇ᶠ_prev, α::Real, prev_err::Real)
 
-    err   = max(maximum(abs.(U̇ᵈ_prev .- Soln.U̇ᵈ)), maximum(abs.(U̇ᶠ_prev .- Soln.U̇ᶠ)))
+    err   = max(maximum(abs.(U̇ᵈ_prev .- S.U̇ᵈ)), maximum(abs.(U̇ᶠ_prev .- S.U̇ᶠ)))
     α_new = err > prev_err ? max(α * 0.5, 0.01) : min(α * 1.01, 0.9)
 
-    U̇ᵈ_damped = α_new .* Soln.U̇ᵈ .+ (1 - α_new) .* U̇ᵈ_prev
-    U̇ᶠ_damped = α_new .* Soln.U̇ᶠ .+ (1 - α_new) .* U̇ᶠ_prev
-    Soln_damped = BaselineSoln(Soln.Wᵈ, Soln.Wᶠ, Soln.Lᵈ, Soln.Lᶠ, U̇ᵈ_damped, U̇ᶠ_damped, Soln.Πᵈ, Soln.Πᶠ, Soln.T)
+    U̇ᵈ_damped = α_new .* S.U̇ᵈ .+ (1 - α_new) .* U̇ᵈ_prev
+    U̇ᶠ_damped = α_new .* S.U̇ᶠ .+ (1 - α_new) .* U̇ᶠ_prev
+    S_damped = Soln(S.Wᵈ, S.Wᶠ, S.Lᵈ, S.Lᶠ, U̇ᵈ_damped, U̇ᶠ_damped, S.Πᵈ, S.Πᶠ, S.T)
 
-    return Soln_damped, err, α_new
+    return S_damped, err, α_new
 
 end
 
 report_iteration(iter, err, α) = println("****************** ITERATION $iter COMPLETE: Outer err = $err (α = $α) *************************")
 
 """
-Extend a converged BaselineSoln from T_old to T_new periods where T_old < T_new, holding
+Extend a converged Soln from T_old to T_new periods where T_old < T_new, holding
 wages and choice probabilities fixed at their terminal values. Used to warm-start the solve
 at a longer horizon once the current horizon isn't long enough to reach steady state — the
 main speedup relative to solving a long horizon from scratch.
 """
-function ExtendSoln(Soln::BaselineSoln, T_new::Integer)
+function ExtendSoln(S::Soln, T_new::Integer)
 
-    N, T_old = size(Soln.Wᵈ)
+    N, T_old = size(S.Wᵈ)
     @assert T_new > T_old "ExtendSoln requires T_new > T_old"
     dT = T_new - T_old
 
-    Wᵈ_ext = hcat(Soln.Wᵈ, repeat(Soln.Wᵈ[:, end:end], 1, dT))
-    Wᶠ_ext = hcat(Soln.Wᶠ, repeat(Soln.Wᶠ[:, end:end], 1, dT))
-    U̇ᵈ_ext = hcat(Soln.U̇ᵈ, ones(N, dT))
-    U̇ᶠ_ext = hcat(Soln.U̇ᶠ, ones(N, dT))
-    Πᵈ_ext = cat(Soln.Πᵈ, repeat(Soln.Πᵈ[:, :, end:end], 1, 1, dT); dims = 3)
-    Πᶠ_ext = cat(Soln.Πᶠ, repeat(Soln.Πᶠ[:, :, end:end], 1, 1, dT); dims = 3)
+    Wᵈ_ext = hcat(S.Wᵈ, repeat(S.Wᵈ[:, end:end], 1, dT))
+    Wᶠ_ext = hcat(S.Wᶠ, repeat(S.Wᶠ[:, end:end], 1, dT))
+    U̇ᵈ_ext = hcat(S.U̇ᵈ, ones(N, dT))
+    U̇ᶠ_ext = hcat(S.U̇ᶠ, ones(N, dT))
+    Πᵈ_ext = cat(S.Πᵈ, repeat(S.Πᵈ[:, :, end:end], 1, 1, dT); dims = 3)
+    Πᶠ_ext = cat(S.Πᶠ, repeat(S.Πᶠ[:, :, end:end], 1, 1, dT); dims = 3)
 
-    Lᵈ_ext, Lᶠ_ext = hcat(Soln.Lᵈ, zeros(N, dT)), hcat(Soln.Lᶠ, zeros(N, dT))
-    Πᵈ_term, Πᶠ_term = Soln.Πᵈ[:, :, end], Soln.Πᶠ[:, :, end]
+    Lᵈ_ext, Lᶠ_ext = hcat(S.Lᵈ, zeros(N, dT)), hcat(S.Lᶠ, zeros(N, dT))
+    Πᵈ_term, Πᶠ_term = S.Πᵈ[:, :, end], S.Πᶠ[:, :, end]
     for t in T_old:T_new - 1
         Lᵈ_ext[:, t + 1] = Πᵈ_term' * Lᵈ_ext[:, t]
         Lᶠ_ext[:, t + 1] = Πᶠ_term' * Lᶠ_ext[:, t]
     end
 
-    return BaselineSoln(Wᵈ_ext, Wᶠ_ext, Lᵈ_ext, Lᶠ_ext, U̇ᵈ_ext, U̇ᶠ_ext, Πᵈ_ext, Πᶠ_ext, T_new)
+    return Soln(Wᵈ_ext, Wᶠ_ext, Lᵈ_ext, Lᶠ_ext, U̇ᵈ_ext, U̇ᶠ_ext, Πᵈ_ext, Πᶠ_ext, T_new)
 
 end
 
@@ -428,7 +428,7 @@ all later periods start from that same level, choice probabilities are held at t
 values, labor supplies are propagated forward under those probabilities, and value changes start
 at their boundary value of 1.
 """
-function BaselineSoln(p::Parameters; T0::Integer = 25)
+function Soln(p::Parameters; T0::Integer = 25)
 
     (; N, Lᵈ₀, Lᶠ₀, Πᵈ₋, Πᶠ₋) = p
 
@@ -446,7 +446,7 @@ function BaselineSoln(p::Parameters; T0::Integer = 25)
 
     U̇ᵈ, U̇ᶠ = ones(N, T0), ones(N, T0)
 
-    return BaselineSoln(Wᵈ, Wᶠ, Lᵈ, Lᶠ, U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T0)
+    return Soln(Wᵈ, Wᶠ, Lᵈ, Lᶠ, U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T0)
 
 end
 
@@ -457,11 +457,11 @@ settled down to its steady-state boundary condition by period T-1.
 """
 function SolveBaseline(p::Parameters = Parameters();
     T0::Integer = 25, outer_tol::Real = 1e-4, outer_maxiter::Integer = 10_000,
-    init::Union{BaselineSoln, Nothing} = nothing, T_step::Integer = 10, ss_tol::Real = 1e-4,
+    init::Union{Soln, Nothing} = nothing, T_step::Integer = 10, ss_tol::Real = 1e-4,
     verbose::Bool = true)
 
-    Soln   = isnothing(init) ? BaselineSoln(p; T0) : init
-    Ṁ      = [no_shock()(t) for t in 1:Soln.T - 1]
+    S   = isnothing(init) ? Soln(p; T0) : init
+    Ṁ      = [no_shock()(t) for t in 1:S.T - 1]
     ss_err = 1 + ss_tol
 
     while ss_err >= ss_tol
@@ -470,14 +470,14 @@ function SolveBaseline(p::Parameters = Parameters();
 
         while outer_err >= outer_tol && outer_iter <= outer_maxiter
 
-            U̇ᵈ_prev, U̇ᶠ_prev = copy(Soln.U̇ᵈ), copy(Soln.U̇ᶠ)
+            U̇ᵈ_prev, U̇ᶠ_prev = copy(S.U̇ᵈ), copy(S.U̇ᶠ)
 
-            Soln = UpdateChoiceProbabilities(Soln, Ṁ; p)
-            Soln = UpdateLaborSupply(Soln; p)
-            Soln = SolveTempEq(Soln; p, verbose = verbose && outer_iter % 50 == 0)
-            Soln = UpdateValueChanges(Soln, Ṁ; p)
+            S = UpdateChoiceProbabilities(S, Ṁ; p)
+            S = UpdateLaborSupply(S; p)
+            S = SolveTempEq(S; p, verbose = verbose && outer_iter % 50 == 0)
+            S = UpdateValueChanges(S, Ṁ; p)
 
-            Soln, outer_err, α = damped_update(Soln, U̇ᵈ_prev, U̇ᶠ_prev, α, prev_err)
+            S, outer_err, α = damped_update(S, U̇ᵈ_prev, U̇ᶠ_prev, α, prev_err)
             prev_err   = outer_err
             outer_iter += 1
 
@@ -487,18 +487,18 @@ function SolveBaseline(p::Parameters = Parameters();
 
         # The T-th column of U̇ is already 1 by construction; check convergence to steady state
         # in the penultimate period instead.
-        ss_err = max(maximum(abs.(Soln.U̇ᵈ[:, end - 1] .- 1)), maximum(abs.(Soln.U̇ᶠ[:, end - 1] .- 1)))
+        ss_err = max(maximum(abs.(S.U̇ᵈ[:, end - 1] .- 1)), maximum(abs.(S.U̇ᶠ[:, end - 1] .- 1)))
 
         if ss_err >= ss_tol
-            verbose && println("Extending T from $(Soln.T) to $(Soln.T + T_step) (ss_err = $ss_err)")
-            T_old = Soln.T
-            Soln  = ExtendSoln(Soln, T_old + T_step)
+            verbose && println("Extending T from $(S.T) to $(S.T + T_step) (ss_err = $ss_err)")
+            T_old = S.T
+            S  = ExtendSoln(S, T_old + T_step)
             append!(Ṁ, [no_shock()(t) for t in T_old:T_old + T_step - 1])
         end
 
     end
 
-    return Soln
+    return S
 
 end
 
@@ -506,6 +506,6 @@ end
                         DIAGNOSTICS
 ================================================================#
 """
-Recover the converged task-productivity series Z(l, t) implied by a solved BaselineSoln.
+Recover the converged task-productivity series Z(l, t) implied by a solved Soln.
 """
-ComputeZ(Soln::BaselineSoln; p::Parameters) = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, Soln.Wᵈ ./ Soln.Wᶠ), :Z)
+ComputeZ(S::Soln; p::Parameters) = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :Z)
