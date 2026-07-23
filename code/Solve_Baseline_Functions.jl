@@ -163,9 +163,7 @@ end
 Solve the temporary equilibrium sequentially forward in time for each location, given the
 already-updated labor stocks. Period 1 (t = 0, 1996) is fixed by the GDP anchor in
 solve_initial_wages; periods 2, …, T are recovered from period 1's real-
-dollar level via the differenced static system — the relative
-wage solves (3.7) directly (solve_scalar_wage, a 1-D root-find), then the foreign wage level
-follows in closed form. TaskAggregates/LaborAggregate at the "old" level are cached from the previous
+dollar level via the differenced static system. TaskAggregates/LaborAggregate at the "old" level are cached from the previous
 period's "new" level rather than recomputed — period t's new level is period t+1's old level.
 The Rest-of-World wage (location N) is fixed exogenously.
 """
@@ -263,7 +261,7 @@ function solve_initial_wages(p::Parameters)
 end
 
 #================================================================
-                        DYNAMIC RECURSION
+                        SOLVE BASELINE ECONOMY
 ================================================================#
 """
 N×N matrix of period-t mobility-cost multipliers. The US-specific mobility cost mₜ only
