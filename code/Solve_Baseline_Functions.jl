@@ -2,9 +2,8 @@
                         TYPE DECLARATIONS
 ================================================================#
 """
-Parameters governing the baseline (factual, no-quota) sequential competitive equilibrium.
-Production parameters (ρ, θ, γ, μ) are the ones estimated in ProdFunc_Estimate.jl / Appendix
-A.5 of the text; there is no separate comparative-advantage curve for each nativity group.
+Parameters governing the baseline (factual, no-quota) sequential equilibrium.
+Production parameters (ρ, θ, γ, μ) are the ones estimated in ProdFunc_Estimate.jl
 """
 struct Parameters{T1 <: Real, T2 <: Integer}
 
@@ -25,13 +24,13 @@ struct Parameters{T1 <: Real, T2 <: Integer}
     Πᵈ₋::Matrix{T1}                             # Pre-period (1995→1996) choice probabilities, domestic (rows origin, cols destination)
     Πᶠ₋::Matrix{T1}                             # Pre-period choice probabilities, foreign
     Lᵈ₀::Vector{T1}                             # Time-zero (1996) domestic labor supplies, millions
-    Lᶠ₀::Vector{T1}                             # Time-zero foreign labor supplies, millions
+    Lᶠ₀::Vector{T1}                             # Time-zero (1996) foreign labor supplies, millions
     Y₀::Vector{T1}                              # Time-zero (1996) real state GDP, millions of dollars (NaN for the Rest-of-World row)
 
 end
 
 """
-The baseline sequential competitive equilibrium: wages, labor supplies, value changes and
+The baseline sequential equilibrium: wages, labor supplies, value changes and
 choice probabilities over a T-period horizon. Πᵈ, Πᶠ hold [π₀, π₁, …, π_{T-2}] — length T-1 —
 since a period-t choice probability governs the transition into period t+1.
 """
@@ -56,13 +55,13 @@ end
 """
 Load the pre-period (1995→1996) choice probabilities and time-zero (1996) labor stocks
 from PiMat.dta. Rows and the pi_{F,D}_* columns are both ordered by FIPS code, with the
-"Rest of World" region last — this is what gives Parameters its N-th-region convention.
+"Rest of World" region last — this is what gives Parameters struct its N-th-region convention.
 """
 load_init_data() = DataFrame(load(joinpath(data, "PiMat.dta")))
 
 """
 Load the current production-function estimate (ρ, θ, γ, μ) from ProductionFunction.jld2,
-as fit by ProdFunc_Estimate.jl under the parameterization of Appendix A.5.
+as fit by ProdFunc_Estimate.jl
 """
 load_prodfunc_estimate() = load(joinpath(@__DIR__, "ProductionFunction.jld2"), "p_star")
 
@@ -114,27 +113,24 @@ function Parameters(;
 end
 
 #================================================================
-        TEMPORARY EQUILIBRIUM  (eq. 3.7, resource feasibility A.11–A.12)
-                    Caliendo, Dvorkin and Parro (2019), Appendix D, step 4
+                    TEMPORARY EQUILIBRIUM 
 ================================================================#
 """
-Task productivity Z and foreign-born task share λ implied by the relative wage w = wᴰ/wᶠ,
-under the parameterization of Appendix A.5. Thin wrapper around ProdFunc.jl's TaskAggregates_μ.
+Task productivity Z and foreign-born task share λ implied by the relative wage w = wᴰ/wᶠ. 
+Wrapper around ProdFunc.jl's TaskAggregates_μ.
 """
 TaskAggregates(w; p::Parameters) = TaskAggregates_μ(p.ρ, p.γ, p.μ, w)
 
 """
-Residual of the relative-wage / task-allocation condition, equation (3.7):
+Residual of the relative-wage / task-allocation condition:
     (wᴰ/wᶠ)^(-1/(1-ρ)) = (Lᴰ/Lᶠ) * λ/(1-λ)
 """
 RelativeWageResidual(w, λ, lᵈ, lᶠ; ρ) = w^(-1 / (1 - ρ)) - (lᵈ / lᶠ) * (λ / (1 - λ))
 
 """
-Scalar (non-vector) form of the relative-wage residual, used by solve_scalar_wage below.
+Scalar relative-wage residual (could be vectorized, but keep it simple), used by solve_scalar_wage below.
 Solving for the level w_{l,t+1} directly given known w_{l,t} is the same equation as solving
-for the proportional change ẇ_{l,t+1} = w_{l,t+1}/w_{l,t} (Solution and Simulation.md,
-"Equilibrium in Differences") — w = wᴰ/wᶠ carries no dollar scale, so this is just a
-reparametrization of the same unknown, and levels are simpler to code directly.
+for the proportional change ẇ_{l,t+1} = w_{l,t+1}/w_{l,t}
 """
 function ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters)
 
@@ -146,13 +142,9 @@ function ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters)
 end
 
 """
-Hand-rolled scalar Newton solve for ScalarWageResidual, replacing NonlinearSolve.jl's
-NewtonRaphson() for this specific, extremely-frequently-called 1-D root-find: SolveTempEq
+Newton solve for ScalarWageResidual. SolveTempEq
 calls this once per (location, period) on every outer iteration of SolveBaseline, so its
-per-call overhead dominates total runtime. Benchmarked at ~3-5μs/call here vs. ~50μs/call for
-NewtonRaphson() and ~32μs/call for SimpleNewtonRaphson() (bit-identical solutions in all
-three cases) — NonlinearSolve.jl's generic problem construction and algorithm dispatch is
-pure overhead for a problem this trivial, repeated millions of times.
+per-call overhead dominates total runtime.
 """
 function solve_scalar_wage(u0, lᴰ_new, lᶠ_new; p::Parameters, abstol::Real = 1e-6, maxiters::Integer = 100)
 
@@ -170,19 +162,12 @@ end
 """
 Solve the temporary equilibrium sequentially forward in time for each location, given the
 already-updated labor stocks. Period 1 (t = 0, 1996) is fixed by the GDP anchor in
-solve_initial_wages and never re-solved; periods 2, …, T are recovered from period 1's real-
-dollar level via the differenced static system of Solution and Simulation.md — the relative
+solve_initial_wages; periods 2, …, T are recovered from period 1's real-
+dollar level via the differenced static system — the relative
 wage solves (3.7) directly (solve_scalar_wage, a 1-D root-find), then the foreign wage level
-follows in closed form: dividing the theoretical resource-feasibility relation at t+1 by the
-same relation at t cancels the unanchored constant (1-θ)(θ/(r+δ))^{θ/(1-θ)} entirely, leaving
-a pure ratio of the model's own Z, L constructs — no re-anchoring to real output is needed (or
-possible) for t ≥ 1, and no root-find is needed for w^F either, since it enters that ratio
-linearly. TaskAggregates/LaborAggregate at the "old" level are cached from the previous
+follows in closed form. TaskAggregates/LaborAggregate at the "old" level are cached from the previous
 period's "new" level rather than recomputed — period t's new level is period t+1's old level.
-The Rest-of-World wage (location N) is fixed exogenously and skipped. This matches Caliendo,
-Dvorkin and Parro (2019)'s own Appendix D algorithm, which likewise carries real-dollar wage
-bills forward in levels using the proportional-change equations rather than re-deriving them
-from a theoretical construct each period.
+The Rest-of-World wage (location N) is fixed exogenously.
 """
 function SolveTempEq(Soln::BaselineSoln; p::Parameters, verbose::Bool = false)
 
@@ -220,19 +205,13 @@ function SolveTempEq(Soln::BaselineSoln; p::Parameters, verbose::Bool = false)
 end
 
 #================================================================
-            INITIAL WAGE BOOTSTRAP  (t = 0, real GDP anchor)
+                INITIAL WAGE  (t = 0, real GDP anchor)
 ================================================================#
 """
-Residual of resource feasibility (A.11), (1-θ)Y = wᴰlᴰ + wᶠlᶠ, using *observed* GDP Y in place
+Use resource feasibility, (1-θ)Y = wᴰlᴰ + wᶠlᶠ, using *observed* GDP Y in place
 of the theoretical (θ/(r+δ))^{θ/(1-θ)}ZL construct in ResourceFeasResidual.
 
-Why: for l < N, the temporary-equilibrium system otherwise has no connection to real currency
-units — Z, λ, L are all scale-free functions of the relative wage and (ρ,γ,μ) alone. Caliendo,
-Dvorkin and Parro (2019) sidestep the analogous problem by never solving levels from a
-theoretical output construct at all: their labor-market-clearing equation (9) makes the wage
-*bill* a residual of observed expenditure Xₜ and trade shares πₜ, not of an independently
-observed wage. The same logic applies here — the real-dollar anchor is *observed output*, not
-a wage series — so we use actual 1996 state GDP (Y₀, from StateAnalysisPreTfp.dta) at t = 0
+I use actual 1996 state GDP (Y₀, from StateAnalysisPreTfp.dta) at t = 0
 only. This makes wᵈ_row, wᶠ_row (real dollars, from IRS SOI / World Bank) directly comparable
 to the model's endogenous state wages without any separate calibration step.
 """
@@ -256,11 +235,11 @@ function InitialWageResidual(u, lᵈ, lᶠ, Y; p::Parameters)
 end
 
 """
-Bootstrap real-dollar wage levels at t = 0 (1996) from actual state GDP (Y₀) and labor stocks
+Backout init wages at t = 0 (1996) from actual state GDP (Y₀) and labor stocks
 (Lᵈ₀, Lᶠ₀), via (3.7) + the data-anchored resource-feasibility residual above. The Rest-of-World
 wage is exogenous and just carried over unchanged. This is the only place actual GDP data enters
-the model; from t ≥ 1 the (forthcoming) proportional-change recursion takes over, so no further
-output data is needed.
+the model; from t ≥ 1 the (forthcoming) proportional-change recursion takes over so that wage changes are
+fully model-implied
 """
 function solve_initial_wages(p::Parameters)
 
@@ -284,26 +263,25 @@ function solve_initial_wages(p::Parameters)
 end
 
 #================================================================
-        DYNAMIC RECURSION  (eq. A.13, 3.4, A.14)
-                    Caliendo, Dvorkin and Parro (2019), Appendix D, steps 2, 3, 5
+                        DYNAMIC RECURSION
 ================================================================#
 """
 N×N matrix of period-t mobility-cost multipliers. The US-specific mobility cost mₜ only
 enters the migration problem (3.1) for moves from "Rest of World" (row N) into a US location
 (columns 1:N-1); all other bilateral costs are unaffected.
 """
-function cost_matrix(μ̇_t, N)
+function cost_matrix(Ṁ_t, N)
     C = ones(N, N)
-    C[N, 1:N - 1] .= μ̇_t
+    C[N, 1:N - 1] .= Ṁ_t
     return C
 end
 
 """
-Update choice probabilities, equation (A.13). Vectorized over (l, l') for each t: the
+Update choice probabilities. Vectorized over (l, l') for each t: the
 numerator matrix is the lagged probability times the forward value change and cost-change
 terms, elementwise; rows are then normalized to sum to one.
 """
-function UpdateChoiceProbabilities(Soln::BaselineSoln, μ̇::Vector; p::Parameters)
+function UpdateChoiceProbabilities(Soln::BaselineSoln, Ṁ::Vector; p::Parameters)
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
     (; U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T) = Soln
@@ -314,7 +292,7 @@ function UpdateChoiceProbabilities(Soln::BaselineSoln, μ̇::Vector; p::Paramete
 
         Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
         Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(μ̇[t], N)
+        C      = cost_matrix(Ṁ[t], N)
 
         Numᵈ = Πᵈ_lag .* (U̇ᵈ[:, t + 1] .^ (β / νᵈ))' .* C .^ (-1 / νᵈ)
         Numᶠ = Πᶠ_lag .* (U̇ᶠ[:, t + 1] .^ (β / νᶠ))' .* C .^ (-1 / νᶠ)
@@ -329,7 +307,7 @@ function UpdateChoiceProbabilities(Soln::BaselineSoln, μ̇::Vector; p::Paramete
 end
 
 """
-Update labor supplies, the factor-supply law of motion (3.4): Lₜ₊₁ = Πₜ' Lₜ.
+Update labor supplies, the factor-supply law of motion: Lₜ₊₁ = Πₜ' Lₜ.
 """
 function UpdateLaborSupply(Soln::BaselineSoln; p::Parameters)
 
@@ -349,12 +327,12 @@ function UpdateLaborSupply(Soln::BaselineSoln; p::Parameters)
 end
 
 """
-Update value changes, equation (A.14), by backward recursion from the boundary condition
+Update value changes, by backward recursion from the boundary condition
 U̇[:, T] = 1. Vectorized over l for each t: the inner sum over destinations l' is a
 matrix-vector product of the (elementwise) lagged-probability/cost-change matrix against the
 forward value changes.
 """
-function UpdateValueChanges(Soln::BaselineSoln, μ̇::Vector; p::Parameters)
+function UpdateValueChanges(Soln::BaselineSoln, Ṁ::Vector; p::Parameters)
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
     (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, T) = Soln
@@ -365,7 +343,7 @@ function UpdateValueChanges(Soln::BaselineSoln, μ̇::Vector; p::Parameters)
 
         Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
         Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(μ̇[t], N)
+        C      = cost_matrix(Ṁ[t], N)
 
         innerᵈ = (Πᵈ_lag .* C .^ (-1 / νᵈ)) * (U̇ᵈ_new[:, t + 1] .^ (β / νᵈ))
         innerᶠ = (Πᶠ_lag .* C .^ (-1 / νᶠ)) * (U̇ᶠ_new[:, t + 1] .^ (β / νᶠ))
@@ -387,14 +365,13 @@ end
 ================================================================#
 """
 The baseline economy: the US-specific mobility cost mₜ stays at its long-run mean forever, so
-the proportional change μ̇ₜ is 1 in every period. This is the reference equilibrium against
-which future counterfactual quota/cost experiments will be measured.
+the proportional change Ṁₜ is 1 in every period. This is the reference equilibrium against
+which future counterfactual cost experiments will be measured.
 """
 no_shock() = t -> 1.0
 
 #================================================================
                         OUTER SOLVER
-                    Caliendo, Dvorkin and Parro (2019), Appendix D, steps 1, 6, 7
 ================================================================#
 """
 Take a damped convex combination of the newly updated U̇'s and their previous values, using
@@ -448,7 +425,7 @@ end
 
 """
 Construct an initial guess for the baseline solution. Wages at t = 0 are the real-dollar GDP-
-anchored bootstrap from solve_initial_wages (fixed except for the exogenous Rest-of-World row);
+anchored from solve_initial_wages (fixed except for the exogenous Rest-of-World row);
 all later periods start from that same level, choice probabilities are held at their pre-period
 values, labor supplies are propagated forward under those probabilities, and value changes start
 at their boundary value of 1.
@@ -476,13 +453,9 @@ function BaselineSoln(p::Parameters; T0::Integer = 25)
 end
 
 """
-Solve for the baseline sequential competitive equilibrium (Caliendo, Dvorkin and Parro (2019),
-Appendix D, Part I): iterate {UpdateChoiceProbabilities, UpdateLaborSupply, SolveTempEq,
+Solve for the baseline sequential competitive equilibrium: iterate {UpdateChoiceProbabilities, UpdateLaborSupply, SolveTempEq,
 UpdateValueChanges} to convergence in U̇, extending the horizon whenever the solution hasn't
 settled down to its steady-state boundary condition by period T-1.
-
-SolveTempEq holds period 1's GDP-anchored real-dollar wage level fixed and recovers periods
-2, …, T from it via the differenced static system, so the anchor is never overwritten.
 """
 function SolveBaseline(p::Parameters = Parameters();
     T0::Integer = 25, outer_tol::Real = 1e-4, outer_maxiter::Integer = 10_000,
@@ -490,7 +463,7 @@ function SolveBaseline(p::Parameters = Parameters();
     verbose::Bool = true)
 
     Soln   = isnothing(init) ? BaselineSoln(p; T0) : init
-    μ̇      = [no_shock()(t) for t in 1:Soln.T - 1]
+    Ṁ      = [no_shock()(t) for t in 1:Soln.T - 1]
     ss_err = 1 + ss_tol
 
     while ss_err >= ss_tol
@@ -501,10 +474,10 @@ function SolveBaseline(p::Parameters = Parameters();
 
             U̇ᵈ_prev, U̇ᶠ_prev = copy(Soln.U̇ᵈ), copy(Soln.U̇ᶠ)
 
-            Soln = UpdateChoiceProbabilities(Soln, μ̇; p)
+            Soln = UpdateChoiceProbabilities(Soln, Ṁ; p)
             Soln = UpdateLaborSupply(Soln; p)
             Soln = SolveTempEq(Soln; p, verbose = verbose && outer_iter % 50 == 0)
-            Soln = UpdateValueChanges(Soln, μ̇; p)
+            Soln = UpdateValueChanges(Soln, Ṁ; p)
 
             Soln, outer_err, α = damped_update(Soln, U̇ᵈ_prev, U̇ᶠ_prev, α, prev_err)
             prev_err   = outer_err
@@ -522,7 +495,7 @@ function SolveBaseline(p::Parameters = Parameters();
             verbose && println("Extending T from $(Soln.T) to $(Soln.T + T_step) (ss_err = $ss_err)")
             T_old = Soln.T
             Soln  = ExtendSoln(Soln, T_old + T_step)
-            append!(μ̇, [no_shock()(t) for t in T_old:T_old + T_step - 1])
+            append!(Ṁ, [no_shock()(t) for t in T_old:T_old + T_step - 1])
         end
 
     end
