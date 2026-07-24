@@ -39,6 +39,16 @@ framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`
 EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year) wt(emp) impulse(fg) ///
 framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
+/*****************************
+    Export baseline IRF (Iv1990) for indirect inference (Julia)
+*****************************/
+loc vars "Z Wage_Foreign Wage_Domestic L"
+foreach v in `vars' {
+    frame `v'_Iv1990 {
+        export delimited h Beta_Iv1990 Se_Iv1990 F_Iv1990 using "${Data}/BaselineIRF_`v'.csv", replace
+    }
+}
+
 * Look at the LOO Bartik
 EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Z fg)) absorb(year) wt(emp) impulse(fg) ///
 framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)
