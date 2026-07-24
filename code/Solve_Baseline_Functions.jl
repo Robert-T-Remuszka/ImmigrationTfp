@@ -142,20 +142,69 @@ function ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters)
 end
 
 """
-Newton solve for ScalarWageResidual. SolveTempEq
-calls this once per (location, period) on every outer iteration of SolveBaseline, so its
-per-call overhead dominates total runtime.
+Damped Newton solve for ScalarWageResidual. SolveTempEq calls this once per (location,
+period) on every outer iteration of SolveBaseline, so its per-call overhead dominates total
+runtime. Backtracks (halving the step) whenever a full Newton step doesn't improve |residual|
+— confirmed via the estimation's failure log that a plain, undamped Newton step genuinely
+fails to converge for some (mostly extreme, elastic-migration) parameter draws, where a
+location's labor stock becomes lopsided enough that the relative-wage equation develops
+steep local curvature. The backtracking adds no extra cost in the common, well-behaved case
+(the "r" used for the convergence check is carried over from the previous iteration's
+accepted step rather than recomputed, so this costs the same one residual + one derivative
+eval per iteration as before whenever no backtracking is needed) and only spends extra
+evaluations exactly where the plain method used to fail outright.
+
+Also accepts gracefully when backtracking bottoms out (α below `αmin`) with a residual that's
+already close to converged (within `loose_abstol`, default 200×abstol): traced this exact case
+— the iterate got stuck at a fixed point with residual ~1.01e-6 against abstol=1e-6 (about 1%
+over), with α shrinking to ~6e-11, small enough that u - α·step underflows back to the same u
+in floating point. That's the solver hitting its achievable-precision floor, not genuine
+non-convergence, and without this it would loop uselessly to maxiters and error every time.
+
+The backtracking condition also treats a non-finite `r_new` as "worse than r": Julia's
+comparison operators return `false` against NaN, so `abs(r_new) >= abs(r)` silently passes
+(rather than triggering backtracking) the moment `r_new` is NaN — confirmed as the source of
+the solver's `residual = NaN` failures, traced to `TaskAggregates_μ`'s λ landing exactly on its
+clamp boundary and making λ/(1-λ)'s ForwardDiff derivative hit 0/0. `!isfinite(r_new)` forces
+backtracking (and ultimately the ordinary failure path) instead of silently adopting a NaN
+iterate.
+
+Bails out early once `|u| = |log w|` exceeds `umax`: for the extreme, elastic-migration draws
+where a location's labor stock goes fully lopsided, the true root sits at an economically
+absurd relative wage (w ~ 1e19 seen directly). Past `u ≈ 4.5` here TaskAggregates_μ's F/(F+D)
+cancellation pins λ to its clamp floor, the residual goes flat (dr → 0), and Newton either
+leaps off to ~1e19 in a single step or, worse, silently "converges" there since the flat
+residual is already below abstol. `umax = 20` (w ∈ [~2e-9, 4.8e8]) sits far above any sensible
+domestic/foreign wage ratio — the exogenous Rest-of-World ratio is ≈15 — so it never binds on a
+real equilibrium, but catches these doomed draws within an iteration of divergence instead of
+grinding out the full maxiters. Checked before the abstol return so a diverged-but-flat iterate
+is rejected rather than falsely accepted.
 """
-function solve_scalar_wage(u0, lᴰ_new, lᶠ_new; p::Parameters, abstol::Real = 1e-6, maxiters::Integer = 100)
+function solve_scalar_wage(u0, lᴰ_new, lᶠ_new; p::Parameters, abstol::Real = 1e-6, maxiters::Integer = 250,
+    αmin::Real = 1e-10, loose_abstol::Real = 200 * abstol, umax::Real = 20.0)
 
     u = u0
+    r = ScalarWageResidual(u, lᴰ_new, lᶠ_new; p)
     for _ in 1:maxiters
-        r = ScalarWageResidual(u, lᴰ_new, lᶠ_new; p)
+        abs(u) > umax && error("Relative wage diverged beyond economically plausible range (|log w| = $(abs(u)) > $umax) — likely an implausible parameter draw")
         abs(r) < abstol && return u
         dr = ForwardDiff.derivative(x -> ScalarWageResidual(x, lᴰ_new, lᶠ_new; p), u)
-        u -= r / dr
+        step = r / dr
+        α = 1.0
+        u_new = u - α * step
+        r_new = ScalarWageResidual(u_new, lᴰ_new, lᶠ_new; p)
+        while (!isfinite(r_new) || abs(r_new) >= abs(r)) && α > αmin
+            α /= 2
+            u_new = u - α * step
+            r_new = ScalarWageResidual(u_new, lᴰ_new, lᶠ_new; p)
+        end
+        if α <= αmin && (!isfinite(r_new) || abs(r_new) >= abs(r))
+            abs(r) < loose_abstol && return u
+            break
+        end
+        u, r = u_new, r_new
     end
-    error("Scalar wage Newton solve failed to converge within $maxiters iterations")
+    error("Scalar wage Newton solve failed to converge within $maxiters iterations (residual = $r)")
 
 end
 
@@ -509,3 +558,11 @@ end
 Recover the converged task-productivity series Z(l, t) implied by a solved Soln.
 """
 ComputeZ(S::Soln; p::Parameters) = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :Z)
+
+"""
+Recover the converged task-aggregate labor series L(l, t) implied by a solved Soln.
+"""
+function ComputeL(S::Soln; p::Parameters)
+    λ = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :λ)
+    return LaborAggregate.(λ, p.ρ, S.Lᶠ, S.Lᵈ)
+end
