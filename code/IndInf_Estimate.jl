@@ -139,7 +139,8 @@ if !isnothing(sim_β_hat)
         targeted = v in TARGET_DEPVARS
         plt = plot(h, data_β[v], ribbon = (data_β[v] .- lo, hi .- data_β[v]),
             fillalpha = 0.2, label = "Data", linewidth = 2, color = :steelblue,
-            xlabel = "h", ylabel = "Δʰln($(ylabs[v]))", title = string(v), grid = false)
+            xlabel = "h", ylabel = "Δʰln($(ylabs[v]))", title = string(v), grid = false,
+            left_margin = 8Plots.mm)
         plot!(plt, h, sim_β_hat[v], label = targeted ? "Model (targeted)" : "Model (untargeted)",
             linewidth = 2, color = :orange, linestyle = targeted ? :solid : :dash)
         plt
