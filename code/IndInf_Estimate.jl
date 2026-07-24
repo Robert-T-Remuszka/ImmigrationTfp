@@ -128,15 +128,20 @@ end
 
 if !isnothing(sim_β_hat)
 
+    # Z, L (the targeted moments) share the top row; the two untargeted wage IRFs share the
+    # bottom row. Model line is orange throughout — solid where targeted, dashed where not.
+    plot_order = [:Z, :L, :Wage_Domestic, :Wage_Foreign]
     ylabs = Dict(:Z => "Z", :Wage_Domestic => "wᴰ", :Wage_Foreign => "wᶠ", :L => "L")
-    plots = map(depvars) do v
+    plots = map(plot_order) do v
         h = 0:9
         lo = data_β[v] .- 1.645 .* data_se[v]
         hi = data_β[v] .+ 1.645 .* data_se[v]
+        targeted = v in TARGET_DEPVARS
         plt = plot(h, data_β[v], ribbon = (data_β[v] .- lo, hi .- data_β[v]),
             fillalpha = 0.2, label = "Data", linewidth = 2, color = :steelblue,
             xlabel = "h", ylabel = "Δʰln($(ylabs[v]))", title = string(v), grid = false)
-        plot!(plt, h, sim_β_hat[v], label = "Model", linewidth = 2, color = :firebrick, linestyle = :dash)
+        plot!(plt, h, sim_β_hat[v], label = targeted ? "Model (targeted)" : "Model (untargeted)",
+            linewidth = 2, color = :orange, linestyle = targeted ? :solid : :dash)
         plt
     end
 

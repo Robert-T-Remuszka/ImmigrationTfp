@@ -163,6 +163,13 @@ end
 ================================================================#
 const IRF_DEPVARS = [:Z, :Wage_Domestic, :Wage_Foreign, :L]
 
+# The model is over-identified even against just two series (4 parameters vs. 2×(H+1)
+# moments), and the wage IRFs were swamping estimation with dynamics the model wasn't
+# getting anywhere close to regardless of θ — so only Z and L are targeted in the objective.
+# simulated_moments still computes all four (IRF_DEPVARS) so the untargeted wage IRFs remain
+# available to plot alongside the targeted ones.
+const TARGET_DEPVARS = [:Z, :L]
+
 """
 Compute the S-averaged simulated LPIV coefficients for all four target variables at
 structural parameters (νᴰ, νᶠ, ψ) and shock scale σ, using a FIXED set of `seeds` (common
@@ -202,12 +209,21 @@ function simulated_moments(νᴰ::Real, νᶠ::Real, ψ::Real, σ::Real; Init_Da
 end
 
 """
-Inverse-variance-weighted sum of squared deviations between the empirical LPIV coefficients
-(`data_β`, `data_se` — from BaselineIRF_*.csv) and the simulated coefficients at θ, summed
-over all four variables and all horizons h = 0,…,H — an over-identified objective (4
-parameters against 4×(H+1) target moments). Weighting by 1/Se² keeps the much larger-magnitude
-wage coefficients from swamping the fit to Z, which is otherwise the paper's primary object
-of interest.
+Equal-weighted-by-variable, inverse-variance-weighted-within-variable sum of squared
+deviations between the empirical LPIV coefficients (`data_β`, `data_se` — from
+BaselineIRF_*.csv) and the simulated coefficients at θ, over `TARGET_DEPVARS` (Z and L only)
+— an over-identified objective (4 parameters against 2×(H+1) target moments).
+
+Within a variable, horizons are weighted by 1/Se² (so a more precisely estimated horizon
+counts for more) — but each variable's within-horizon weights are separately normalized to
+sum to 1 before being added together, so Z and L contribute equally to the total regardless
+of the fact that Z's LPIV coefficients happen to have much smaller standard errors than L's
+(~300x smaller inverse-variance on average). Without this normalization the fully efficient
+diagonal weighting would make the objective essentially "match Z only" — the standard
+efficient-GMM outcome, but not what's wanted here now that both series are deliberately
+targeted; this equal-weight-per-variable choice trades some classical efficiency for making
+sure both moment types actually discipline the estimates (in the spirit of the
+identity-weighting alternative to efficient GMM discussed in Altonji and Segal (1996)).
 """
 function smd_objective(νᴰ::Real, νᶠ::Real, ψ::Real, σ::Real; Init_Data::DataFrame,
     data_β::NamedTuple, data_se::NamedTuple, seeds::AbstractVector{<:Integer},
@@ -223,6 +239,13 @@ function smd_objective(νᴰ::Real, νᶠ::Real, ψ::Real, σ::Real; Init_Data::
         return 1e10
     end
 
-    return sum(sum(((data_β[v] .- sim_β[v]) ./ data_se[v]) .^ 2) for v in IRF_DEPVARS)
+    Q = 0.0
+    for v in TARGET_DEPVARS
+        raw_w = 1 ./ data_se[v] .^ 2
+        w = raw_w ./ sum(raw_w)
+        Q += sum(w .* (data_β[v] .- sim_β[v]) .^ 2)
+    end
+
+    return Q
 
 end
