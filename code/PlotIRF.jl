@@ -16,16 +16,11 @@ depvars = [:Z, :Wage_Domestic, :Wage_Foreign, :L]
 data_β  = (; (v => CSV.read(joinpath(data, "BaselineIRF_$(v).csv"), DataFrame).Beta_Iv1990 for v in depvars)...)
 data_se = (; (v => CSV.read(joinpath(data, "BaselineIRF_$(v).csv"), DataFrame).Se_Iv1990   for v in depvars)...)
 
-# IndInfEstimate.jld2 on disk is still the stale pre-fix run (see conversation) — job
-# 3865176 (currently running, targeting only Z and L) hasn't reached its jldsave yet. Until
-# it does, use the best point its own log has actually printed a parameter vector for: the
-# global-search winner reported early in slurm-3865176.out. (The NelderMead local-refinement
-# trace below that only prints Q and a gradient-norm-like column each iteration — Optim's
-# default show_trace doesn't print the simplex point — so even though local refinement has
-# since improved on this Q, its θ isn't recoverable from the log; this is the closest we can
-# get without waiting for the job to finish.)
-νᴰ̂, νᶠ̂, ψ̂, σ̂ = 1.472378934707888, 1.2582472741714656, -0.8703811891336098, 1.8111673024284776
-println("Plotting at job 3865176's global-search-best θ (placeholder, not yet the final estimate): νᴰ=$νᴰ̂, νᶠ=$νᶠ̂, ψ=$ψ̂, σ=$σ̂   (Q=954.43)")
+# Placeholder parameters (not the final estimate) — the best point found so far by the
+# parallel global search of the still-running indirect-inference job (3865225), targeting
+# only the Z and L IRFs with equal weighting; local refinement (xNES) is still ongoing.
+νᴰ̂, νᶠ̂, ψ̂, σ̂ = 1.4724, 1.2582, -0.8704, 1.8112
+println("Plotting at global-search-best placeholder θ (indirect inference still pending): νᴰ=$νᴰ̂, νᶠ=$νᶠ̂, ψ=$ψ̂, σ=$σ̂")
 flush(stdout)
 
 S_estimation = 20
