@@ -55,16 +55,7 @@ function TaskAggregates_μ(ρ, γ, μ, w)
     D = I_D_μ(ρ, γ, μ, w)
 
     Z = (F + D)^(1 / b)
-    # λ is a task share and must live in [0,1] by construction, but at extreme wage ratios F
-    # and D can differ by many orders of magnitude (confirmed directly: w~3e19 gave F~-3.5e18
-    # against D~1.3e33 — a 16-order-of-magnitude gap), and the catastrophic cancellation in
-    # F/(F+D) can then land just barely outside [0,1] even though F's true contribution is
-    # negligible either way. This is what was feeding LaborAggregate a tiny-negative λ (or
-    # 1-λ) and throwing on λ^(1-ρ)/(1-λ)^(1-ρ)'s fractional exponent — clamp at the source.
-    # Clamped away from the exact endpoints (rather than to [0.0, 1.0]) because downstream
-    # residuals divide by λ or (1-λ): an exact 0 or 1 makes that quotient's derivative hit 0/0
-    # under ForwardDiff, producing a NaN Newton step in solve_scalar_wage even though the value
-    # itself is fine.
+    
     λ = clamp(F / (F + D), 1e-12, 1 - 1e-12)
 
     return (; Z, λ)
