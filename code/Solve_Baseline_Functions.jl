@@ -2,8 +2,8 @@
                         TYPE DECLARATIONS
 ================================================================#
 """
-Parameters governing the baseline (factual, no-quota) sequential equilibrium.
-Production parameters (ρ, θ, γ, μ) are the ones estimated in ProdFunc_Estimate.jl
+Parameters governing the baseline equilibrium.
+Production parameters (ρ, θ, γ, μ) are estimated in ProdFunc_Estimate.jl
 """
 struct Parameters{T1 <: Real, T2 <: Integer}
 
@@ -31,8 +31,8 @@ end
 
 """
 The baseline sequential equilibrium: wages, labor supplies, value changes and
-choice probabilities over a T-period horizon. Πᵈ, Πᶠ hold [π₀, π₁, …, π_{T-2}] — length T-1 —
-since a period-t choice probability governs the transition into period t+1.
+choice probabilities over a T-period horizon. Πᵈ, Πᶠ hold [π₀, π₁, …, π_{T-2}].
+This is length (T-1). Recall that period-t choice probability governs the transition into period t+1.
 """
 struct Soln{T1 <: Real, T2 <: Integer}
 
@@ -128,9 +128,7 @@ Residual of the relative-wage / task-allocation condition:
 RelativeWageResidual(w, λ, lᵈ, lᶠ; ρ) = w^(-1 / (1 - ρ)) - (lᵈ / lᶠ) * (λ / (1 - λ))
 
 """
-Scalar relative-wage residual (could be vectorized, but keep it simple), used by solve_scalar_wage below.
-Solving for the level w_{l,t+1} directly given known w_{l,t} is the same equation as solving
-for the proportional change ẇ_{l,t+1} = w_{l,t+1}/w_{l,t}
+Relative-wage residual, used by solve_scalar_wage below. Solving for the level w_{l,t+1} directly given known w_{l,t}
 """
 function ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters)
 
