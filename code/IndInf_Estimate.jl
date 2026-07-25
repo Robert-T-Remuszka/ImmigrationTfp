@@ -15,7 +15,7 @@ N_CORES = something(
 N_WORKERS = max(N_CORES - 2, 1)   # leave 2 cores for the driver process + OS overhead
 addprocs(N_WORKERS)
 
-@everywhere using JLD2, StatFiles, DataFrames, CSV, NonlinearSolve, LinearAlgebra, ForwardDiff, Random
+@everywhere using JLD2, StatFiles, DataFrames, CSV, NonlinearSolve, LinearAlgebra, ForwardDiff, Random, BlackBoxOptim
 
 # force single-threaded BLAS per worker — with this many worker processes, letting each
 # also spawn multiple BLAS threads would oversubscribe the machine and slow things down; the
@@ -32,7 +32,7 @@ addprocs(N_WORKERS)
 @everywhere include(joinpath(CODE_DIR, "Simulation_Functions.jl"))
 @everywhere include(joinpath(CODE_DIR, "IndInf_Functions.jl"))
 
-using Optim, Plots
+using Plots
 
 # %% Load the empirical target (coefficients + SEs) that indirect inference will match
 Init_Data = load_init_data()
@@ -81,33 +81,30 @@ best_idx = argmin(Qs)
 println("Best from global search: θ = $θ_best   Q = $(Qs[best_idx])")
 flush(stdout)
 
-# %% Local refinement from the best global point (sequential — now polishing near a good
-# basin rather than exploring, so this should converge quickly).
-# Abandoned Fminbox's barrier approach after it let the inner NelderMead step to ψ=-1.28
-# against a [-0.9,0.9] bound (confirmed 2026-07-24) — the barrier's influence near a boundary
-# depends on μ being large enough relative to the objective's own scale (Q~950), and tuning
-# that reliably is more fragile than just removing the failure mode outright.
-# A pure clamp-then-evaluate wrapper (tried first) is NOT enough on its own: clamping creates
-# a flat plateau wherever multiple raw points map to the same clamped value, which confuses
-# NelderMead's simplex geometry — verified this directly: on a toy quadratic with its true
-# minimum safely *inside* the bounds, a pure clamp wrapper still converged to the boundary
-# rather than the true interior optimum. Fix: clamp before the (expensive, crash-prone)
-# evaluation for safety, but ALSO add a smooth quadratic exterior penalty for how far outside
-# the box the raw (unclamped) point is — this gives NelderMead a real gradient-like signal to
-# correct itself with, rather than a flat plateau, while still guaranteeing every actual
-# smd_objective call happens at a feasible point. Verified on the same toy problem: correctly
-# finds the true interior minimum when unconstrained, and correctly settles on the boundary
-# when the true optimum lies outside it.
-function eval_θ_bounded(θ)
-    penalty = sum(max.(0.0, lower .- θ) .^ 2) + sum(max.(0.0, θ .- upper) .^ 2)
-    return eval_θ(clamp.(θ, lower, upper)) + 1e4 * penalty
-end
+# %% Local refinement from the best global point — via BlackBoxOptim's xNES rather than
+# Optim's NelderMead. NelderMead is inherently sequential (each new simplex point depends on
+# the previous iteration's evaluations), so a whole SLURM allocation's worth of cores sat idle
+# during this phase; xNES instead proposes its ENTIRE population every generation, which
+# BlackBoxOptim's `Workers=` option genuinely parallelizes across the same worker pool via a
+# pmap-style scheduler (confirmed directly from source, not just documentation). This also
+# drops the clamp+quadratic-penalty machinery NelderMead needed to stay near the box: xNES
+# respects `SearchRange` as a hard constraint natively, so `eval_θ` is passed as-is, unwrapped
+# — no risk of it repeating NelderMead's earlier failure mode of stepping to ψ=-1.28 against
+# a [-0.9,0.9] bound.
+#
+# `lambda` (the population size per generation) must be set explicitly — xNES's own default
+# (4 + ceil(log(3·d)) ≈ 7 for d=4 dimensions) would only ever use ~7 of the N_WORKERS workers
+# per generation regardless of how many are available, silently defeating the point of
+# parallelizing this stage at all.
+search_range = collect(zip(lower, upper))
 
-result = Optim.optimize(eval_θ_bounded, θ_best, NelderMead(),
-    Optim.Options(time_limit = 3 * 3600.0, show_trace = true, show_every = 1))
+opt = bbsetup(eval_θ; SearchRange = search_range, Method = :xnes,
+    Workers = workers(), lambda = N_WORKERS,
+    MaxTime = 3 * 3600.0, TraceMode = :verbose, TraceInterval = 30.0)
+result = bboptimize(opt)
 
-θ_local = clamp.(Optim.minimizer(result), lower, upper)
-Q_local = eval_θ(θ_local)
+θ_local = best_candidate(result)
+Q_local = best_fitness(result)
 
 θ̂, Q̂ = Q_local < Qs[best_idx] ? (θ_local, Q_local) : (θ_best, Qs[best_idx])
 νᴰ̂, νᶠ̂, ψ̂, σ̂ = θ̂
