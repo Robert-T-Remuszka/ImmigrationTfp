@@ -122,87 +122,111 @@ Wrapper around ProdFunc.jl's TaskAggregates_μ.
 TaskAggregates(w; p::Parameters) = TaskAggregates_μ(p.ρ, p.γ, p.μ, w)
 
 """
-Residual of the relative-wage / task-allocation condition:
-    (wᴰ/wᶠ)^(-1/(1-ρ)) = (Lᴰ/Lᶠ) * λ/(1-λ)
+Odds ratio of the foreign-born task share, λ/(1-λ). Since λ = F/(F+D) with F, D the
+foreign/domestic comparative-advantage integrals (ProdFunc.jl's I_F_μ, I_D_μ), this is exactly
+F/D — computed that way so it never passes through TaskAggregates_μ's clamp on λ.
+
+The clamp is not innocuous in this position. Once λ pins to its floor, λ/(1-λ) freezes at a
+constant, so the residual below degenerates to its first term alone and decays to O(1e-11) —
+*below* any sensible abstol — with a derivative of O(1e-16). A Newton solve on the clamped form
+therefore reports success at an economically absurd relative wage rather than failing. Written
+as F/D both residual and derivative stay well scaled out to |log w| ≈ 20, so an ordinary
+convergence test means what it says.
 """
-RelativeWageResidual(w, λ, lᵈ, lᶠ; ρ) = w^(-1 / (1 - ρ)) - (lᵈ / lᶠ) * (λ / (1 - λ))
+task_share_odds(w; p::Parameters) = I_F_μ(p.ρ, p.γ, p.μ, w) / I_D_μ(p.ρ, p.γ, p.μ, w)
 
 """
-Relative-wage residual, used by solve_scalar_wage below. Solving for the level w_{l,t+1} directly given known w_{l,t}
+The two sides of the relative-wage / task-allocation condition at relative wage w,
+    (wᴰ/wᶠ)^(-1/(1-ρ))   =   (Lᴰ/Lᶠ) · λ/(1-λ),
+returned separately rather than differenced. The residual is their difference, but their
+magnitude is what says how large a difference is meaningful — see solve_scalar_wage.
 """
-function ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters)
+wage_condition_terms(w, lᵈ, lᶠ; p::Parameters) =
+    (w^(-1 / (1 - p.ρ)), (lᵈ / lᶠ) * task_share_odds(w; p))
 
-    w = exp(u)
-    (; λ) = TaskAggregates(w; p)
+"""
+Residual of the relative-wage / task-allocation condition.
+"""
+function RelativeWageResidual(w, lᵈ, lᶠ; p::Parameters)
 
-    return RelativeWageResidual(w, λ, lᴰ_new, lᶠ_new; p.ρ)
+    supply, demand = wage_condition_terms(w, lᵈ, lᶠ; p)
+
+    return supply - demand
 
 end
 
 """
-Damped Newton solve for ScalarWageResidual. SolveTempEq calls this once per (location,
-period) on every outer iteration of SolveBaseline, so its per-call overhead dominates total
-runtime. Backtracks (halving the step) whenever a full Newton step doesn't improve |residual|
-— confirmed via the estimation's failure log that a plain, undamped Newton step genuinely
-fails to converge for some (mostly extreme, elastic-migration) parameter draws, where a
-location's labor stock becomes lopsided enough that the relative-wage equation develops
-steep local curvature. The backtracking adds no extra cost in the common, well-behaved case
-(the "r" used for the convergence check is carried over from the previous iteration's
-accepted step rather than recomputed, so this costs the same one residual + one derivative
-eval per iteration as before whenever no backtracking is needed) and only spends extra
-evaluations exactly where the plain method used to fail outright.
-
-Also accepts gracefully when backtracking bottoms out (α below `αmin`) with a residual that's
-already close to converged (within `loose_abstol`, default 200×abstol): traced this exact case
-— the iterate got stuck at a fixed point with residual ~1.01e-6 against abstol=1e-6 (about 1%
-over), with α shrinking to ~6e-11, small enough that u - α·step underflows back to the same u
-in floating point. That's the solver hitting its achievable-precision floor, not genuine
-non-convergence, and without this it would loop uselessly to maxiters and error every time.
-
-The backtracking condition also treats a non-finite `r_new` as "worse than r": Julia's
-comparison operators return `false` against NaN, so `abs(r_new) >= abs(r)` silently passes
-(rather than triggering backtracking) the moment `r_new` is NaN — confirmed as the source of
-the solver's `residual = NaN` failures, traced to `TaskAggregates_μ`'s λ landing exactly on its
-clamp boundary and making λ/(1-λ)'s ForwardDiff derivative hit 0/0. `!isfinite(r_new)` forces
-backtracking (and ultimately the ordinary failure path) instead of silently adopting a NaN
-iterate.
-
-Bails out early once `|u| = |log w|` exceeds `umax`: for the extreme, elastic-migration draws
-where a location's labor stock goes fully lopsided, the true root sits at an economically
-absurd relative wage (w ~ 1e19 seen directly). Past `u ≈ 4.5` here TaskAggregates_μ's F/(F+D)
-cancellation pins λ to its clamp floor, the residual goes flat (dr → 0), and Newton either
-leaps off to ~1e19 in a single step or, worse, silently "converges" there since the flat
-residual is already below abstol. `umax = 20` (w ∈ [~2e-9, 4.8e8]) sits far above any sensible
-domestic/foreign wage ratio — the exogenous Rest-of-World ratio is ≈15 — so it never binds on a
-real equilibrium, but catches these doomed draws within an iteration of divergence instead of
-grinding out the full maxiters. Checked before the abstol return so a diverged-but-flat iterate
-is rejected rather than falsely accepted.
+Relative-wage residual in log form, u = log(wᴰ/wᶠ) — used by solve_scalar_wage below, which
+solves for the level w_{l,t+1} directly given known w_{l,t}. Working in logs keeps the iterate
+unconstrained while w = exp(u) stays positive by construction.
 """
-function solve_scalar_wage(u0, lᴰ_new, lᶠ_new; p::Parameters, abstol::Real = 1e-6, maxiters::Integer = 250,
-    αmin::Real = 1e-10, loose_abstol::Real = 200 * abstol, umax::Real = 20.0)
+ScalarWageResidual(u, lᴰ_new, lᶠ_new; p::Parameters) =
+    RelativeWageResidual(exp(u), lᴰ_new, lᶠ_new; p)
+
+"""
+Residual, its derivative, and the scale of the condition, in a single evaluation: u is seeded
+as a ForwardDiff dual of unit partial, so value and partial both fall out of one pass.
+`ForwardDiff.derivative` would re-evaluate the residual a second time to get the same number,
+and Newton needs both at every iterate, so fusing them cuts the per-iteration cost by about a
+third. The third return is max(|supply|, |demand|) — the magnitude the residual should be judged
+against, since a difference of two numbers near 1e9 cannot be resolved below ~1e-7 no matter how
+well converged the iterate is.
+"""
+function residual_and_derivative(u, lᴰ_new, lᶠ_new; p::Parameters)
+
+    supply, demand = wage_condition_terms(exp(ForwardDiff.Dual{Nothing}(u, one(u))),
+                                          lᴰ_new, lᶠ_new; p)
+    rd = supply - demand
+
+    return (ForwardDiff.value(rd), ForwardDiff.partials(rd, 1),
+            max(abs(ForwardDiff.value(supply)), abs(ForwardDiff.value(demand))))
+
+end
+
+"""
+Safeguarded Newton solve for ScalarWageResidual, called once per (location, period) on every
+outer iteration of SolveBaseline. Standard backtracking line search: take the full Newton step,
+and halve it until |residual| actually decreases. A non-finite trial residual counts as "worse"
+— Julia's comparisons return false against NaN, so testing only `abs(r_new) >= abs(r)` would
+silently *accept* a NaN iterate rather than backtrack away from it.
+
+Convergence is tested against `abstol + reltol·scale`, not `abstol` alone. The two sides of the
+condition are not O(1): where a location's foreign labor stock has nearly emptied out, Lᴰ/Lᶠ runs
+to ~1e10 and both sides reach ~1e9, at which point one ulp is already ~1e-7 and their difference
+cannot be driven below ~1e-6 by any amount of iterating. A pure absolute tolerance there demands
+~1e-15 relative accuracy — below the floating-point floor — so the solve stalls at a point that
+is in fact converged to 8-12 ulps. Scaling by the condition's own magnitude asks for the same
+*relative* accuracy everywhere, which is both achievable and what the equilibrium condition
+actually means. reltol = 1e-12 sits ~600x above the observed floor and far tighter than the
+outer fixed point's own 1e-4.
+"""
+function solve_scalar_wage(u0, lᴰ_new, lᶠ_new; p::Parameters, abstol::Real = 1e-6,
+    reltol::Real = 1e-12, maxiters::Integer = 250, αmin::Real = 1e-10)
 
     u = u0
-    r = ScalarWageResidual(u, lᴰ_new, lᶠ_new; p)
+    r, dr, scale = residual_and_derivative(u, lᴰ_new, lᶠ_new; p)
+
     for _ in 1:maxiters
-        abs(u) > umax && error("Relative wage diverged beyond economically plausible range (|log w| = $(abs(u)) > $umax) — likely an implausible parameter draw")
-        abs(r) < abstol && return u
-        dr = ForwardDiff.derivative(x -> ScalarWageResidual(x, lᴰ_new, lᶠ_new; p), u)
-        step = r / dr
-        α = 1.0
-        u_new = u - α * step
-        r_new = ScalarWageResidual(u_new, lᴰ_new, lᶠ_new; p)
+
+        abs(r) <= abstol + reltol * scale && return u
+
+        step  = r / dr
+        α     = 1.0
+        u_new = u - step
+        r_new, dr_new, scale_new = residual_and_derivative(u_new, lᴰ_new, lᶠ_new; p)
+
         while (!isfinite(r_new) || abs(r_new) >= abs(r)) && α > αmin
             α /= 2
             u_new = u - α * step
-            r_new = ScalarWageResidual(u_new, lᴰ_new, lᶠ_new; p)
+            r_new, dr_new, scale_new = residual_and_derivative(u_new, lᴰ_new, lᶠ_new; p)
         end
-        if α <= αmin && (!isfinite(r_new) || abs(r_new) >= abs(r))
-            abs(r) < loose_abstol && return u
-            break
-        end
-        u, r = u_new, r_new
+
+        u, r, dr, scale = u_new, r_new, dr_new, scale_new
+
     end
-    error("Scalar wage Newton solve failed to converge within $maxiters iterations (residual = $r)")
+
+    error("Scalar wage Newton solve failed to converge within $maxiters iterations " *
+          "(residual = $r, tolerance = $(abstol + reltol * scale))")
 
 end
 
@@ -268,14 +292,11 @@ into a 2-vector, given u = [log(wᴰ/wᶠ), log(wᶠ)]. Used only at t = 0 — s
 """
 function InitialWageResidual(u, lᵈ, lᶠ, Y; p::Parameters)
 
-    (; ρ, θ) = p
     w, wᶠ = exp(u[1]), exp(u[2])
     wᵈ    = w * wᶠ
 
-    (; λ) = TaskAggregates(w; p)
-
-    return [RelativeWageResidual(w, λ, lᵈ, lᶠ; ρ),
-            ResourceFeasResidualData(wᵈ, wᶠ, Y, lᵈ, lᶠ; θ)]
+    return [RelativeWageResidual(w, lᵈ, lᶠ; p),
+            ResourceFeasResidualData(wᵈ, wᶠ, Y, lᵈ, lᶠ; θ = p.θ)]
 
 end
 
@@ -322,6 +343,31 @@ function cost_matrix(Ṁ_t, N)
 end
 
 """
+Apply that same period-t cost change to an already-built numerator matrix, in place, without
+materializing C. Since C is 1 everywhere except row N's US columns, `A .* C .^ (-1/ν)` touches
+N² entries to change N-1 of them — and in the baseline, where Ṁ ≡ 1, it changes none at all
+while still paying for N² calls to `^`. cost_matrix above remains the statement of the
+structure; this is the same operation restricted to the entries that can actually differ.
+"""
+apply_cost_change!(A, Ṁ_t, ν, N) = (@views A[N, 1:N - 1] .*= Ṁ_t^(-1 / ν); A)
+
+"""
+Row N of the inner sum Σ_{l'} Π_lag[N,l'] · C[N,l']^(-1/ν) · f[l'], computed directly. Every
+other row of the plain product Π_lag * f is already correct (their costs are unchanged), so
+only this row needs the cost change — see apply_cost_change! for why that beats building C.
+"""
+function inner_row_N(Π_lag, f, Ṁ_t, ν, N)
+
+    s = zero(eltype(f))
+    @inbounds for j in 1:N - 1
+        s += Π_lag[N, j] * f[j]
+    end
+
+    return Ṁ_t^(-1 / ν) * s + Π_lag[N, N] * f[N]
+
+end
+
+"""
 Update choice probabilities. Vectorized over (l, l') for each t: the
 numerator matrix is the lagged probability times the forward value change and cost-change
 terms, elementwise; rows are then normalized to sum to one.
@@ -333,17 +379,32 @@ function UpdateChoiceProbabilities(S::Soln, Ṁ::Vector; p::Parameters)
 
     Πᵈ_new, Πᶠ_new = copy(Πᵈ), copy(Πᶠ)
 
+    # scratch buffers, reused across periods: this loop runs T-1 times per outer iteration and
+    # hundreds of outer iterations per solve, so allocating fresh N×N temporaries every period
+    # was the single largest cost in the whole baseline solve
+    Numᵈ, Numᶠ = zeros(N, N), zeros(N, N)
+    fᵈ, fᶠ     = zeros(1, N), zeros(1, N)      # 1×N: broadcasts across destinations
+    sᵈ, sᶠ     = zeros(N, 1), zeros(N, 1)      # N×1: row sums, for normalization
+
     for t in 1:T - 1
 
-        Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
-        Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(Ṁ[t], N)
+        # note these read the PREVIOUS iterate's Π, not Πᵈ_new — a Jacobi-style update
+        Πᵈ_lag = t == 1 ? Πᵈ₋ : @view Πᵈ[:, :, t - 1]
+        Πᶠ_lag = t == 1 ? Πᶠ₋ : @view Πᶠ[:, :, t - 1]
 
-        Numᵈ = Πᵈ_lag .* (U̇ᵈ[:, t + 1] .^ (β / νᵈ))' .* C .^ (-1 / νᵈ)
-        Numᶠ = Πᶠ_lag .* (U̇ᶠ[:, t + 1] .^ (β / νᶠ))' .* C .^ (-1 / νᶠ)
+        @views fᵈ .= U̇ᵈ[:, t + 1]' .^ (β / νᵈ)
+        @views fᶠ .= U̇ᶠ[:, t + 1]' .^ (β / νᶠ)
 
-        Πᵈ_new[:, :, t] = Numᵈ ./ sum(Numᵈ, dims = 2)
-        Πᶠ_new[:, :, t] = Numᶠ ./ sum(Numᶠ, dims = 2)
+        Numᵈ .= Πᵈ_lag .* fᵈ
+        Numᶠ .= Πᶠ_lag .* fᶠ
+        apply_cost_change!(Numᵈ, Ṁ[t], νᵈ, N)
+        apply_cost_change!(Numᶠ, Ṁ[t], νᶠ, N)
+
+        sum!(sᵈ, Numᵈ)
+        sum!(sᶠ, Numᶠ)
+
+        @views Πᵈ_new[:, :, t] .= Numᵈ ./ sᵈ
+        @views Πᶠ_new[:, :, t] .= Numᶠ ./ sᶠ
 
     end
 
@@ -384,20 +445,30 @@ function UpdateValueChanges(S::Soln, Ṁ::Vector; p::Parameters)
 
     U̇ᵈ_new, U̇ᶠ_new = ones(N, T), ones(N, T)
 
+    # scratch buffers, reused across periods (see UpdateChoiceProbabilities)
+    fᵈ, fᶠ         = zeros(N), zeros(N)
+    innerᵈ, innerᶠ = zeros(N), zeros(N)
+
     for t in T - 1:-1:1
 
-        Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
-        Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(Ṁ[t], N)
+        Πᵈ_lag = t == 1 ? Πᵈ₋ : @view Πᵈ[:, :, t - 1]
+        Πᶠ_lag = t == 1 ? Πᶠ₋ : @view Πᶠ[:, :, t - 1]
 
-        innerᵈ = (Πᵈ_lag .* C .^ (-1 / νᵈ)) * (U̇ᵈ_new[:, t + 1] .^ (β / νᵈ))
-        innerᶠ = (Πᶠ_lag .* C .^ (-1 / νᶠ)) * (U̇ᶠ_new[:, t + 1] .^ (β / νᶠ))
+        @views fᵈ .= U̇ᵈ_new[:, t + 1] .^ (β / νᵈ)
+        @views fᶠ .= U̇ᶠ_new[:, t + 1] .^ (β / νᶠ)
 
-        ẇᵈ = t == 1 ? ones(N) : Wᵈ[:, t] ./ Wᵈ[:, t - 1]
-        ẇᶠ = t == 1 ? ones(N) : Wᶠ[:, t] ./ Wᶠ[:, t - 1]
+        # the inner sum with all costs at 1, then the one row whose costs actually change
+        mul!(innerᵈ, Πᵈ_lag, fᵈ)
+        mul!(innerᶠ, Πᶠ_lag, fᶠ)
+        innerᵈ[N] = inner_row_N(Πᵈ_lag, fᵈ, Ṁ[t], νᵈ, N)
+        innerᶠ[N] = inner_row_N(Πᶠ_lag, fᶠ, Ṁ[t], νᶠ, N)
 
-        U̇ᵈ_new[:, t] = ẇᵈ .* innerᵈ .^ νᵈ
-        U̇ᶠ_new[:, t] = ẇᶠ .* innerᶠ .^ νᶠ
+        @inbounds for i in 1:N
+            ẇᵈ = t == 1 ? one(eltype(Wᵈ)) : Wᵈ[i, t] / Wᵈ[i, t - 1]
+            ẇᶠ = t == 1 ? one(eltype(Wᶠ)) : Wᶠ[i, t] / Wᶠ[i, t - 1]
+            U̇ᵈ_new[i, t] = ẇᵈ * innerᵈ[i]^νᵈ
+            U̇ᶠ_new[i, t] = ẇᶠ * innerᶠ[i]^νᶠ
+        end
 
     end
 

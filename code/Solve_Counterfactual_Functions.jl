@@ -11,40 +11,85 @@ directly usable as M̂ₜ too (M̂ₜ := Ṁ̃ₜ/Ṁₜ = Ṁ̃ₜ/1 = Ṁ̃ₜ
 mit_shock(; σ::Real, ψ::Real) = t -> t == 1 ? exp(σ) : exp(-(1 - ψ) * ψ^(t - 2) * σ)
 
 #================================================================
-        COUNTERFACTUAL DYNAMIC BLOCK 
+        COUNTERFACTUAL DYNAMIC BLOCK
 ================================================================#
+"""
+Quantities that depend only on the (fixed) Baseline, precomputed once so the counterfactual's
+fixed-point loop doesn't rebuild them on every iteration:
+
+  * `Πᵈ_dot`, `Πᶠ_dot` — the baseline's own probability changes Πₜ/Πₜ₋₁, an N×N division per
+    period that was previously redone on every one of the hundreds of counterfactual iterations
+    despite being identical each time.
+  * `ẇᵈ`, `ẇᶠ` — the baseline's gross wage changes Wₜ/Wₜ₋₁ (column 1 left at 1, matching the
+    t = 1 convention in UpdateChangesHat).
+
+Both update functions below accept this as a keyword defaulting to a fresh build, so calling
+them standalone still works — it is just slower, which is why SolveCounterfactual builds it once
+and passes it in.
+"""
+function counterfactual_cache(Baseline::Soln; p::Parameters)
+
+    (; N, Πᵈ₋, Πᶠ₋) = p
+    (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, T) = Baseline
+
+    Πᵈ_dot, Πᶠ_dot = similar(Πᵈ), similar(Πᶠ)
+    for t in 1:T - 1
+        Πᵈ_lag = t == 1 ? Πᵈ₋ : @view Πᵈ[:, :, t - 1]
+        Πᶠ_lag = t == 1 ? Πᶠ₋ : @view Πᶠ[:, :, t - 1]
+        @views Πᵈ_dot[:, :, t] .= Πᵈ[:, :, t] ./ Πᵈ_lag
+        @views Πᶠ_dot[:, :, t] .= Πᶠ[:, :, t] ./ Πᶠ_lag
+    end
+
+    ẇᵈ, ẇᶠ = ones(N, T), ones(N, T)
+    for t in 2:T
+        @views ẇᵈ[:, t] .= Wᵈ[:, t] ./ Wᵈ[:, t - 1]
+        @views ẇᶠ[:, t] .= Wᶠ[:, t] ./ Wᶠ[:, t - 1]
+    end
+
+    return (; Πᵈ_dot, Πᶠ_dot, ẇᵈ, ẇᶠ)
+
+end
+
 """
 Update the counterfactual choice probabilities π̃, given the just-updated hat value changes
 (Û := CF.U̇/Baseline.U̇, derived internally) and the fixed, already-solved Baseline. Mirrors
-UpdateChoiceProbabilities's vectorized structure, with the baseline's dot probability change
-(Πᵈ_dot) and the counterfactual's own lagged probability (Π̃ᵈ_lag) both entering multiplicatively,
-matching the paper's π̃ⁿ equation exactly.
+UpdateChoiceProbabilities's structure, with the baseline's dot probability change (Πᵈ_dot,
+from the cache) and the counterfactual's own lagged probability (Π̃ᵈ_lag) both entering
+multiplicatively, matching the paper's π̃ⁿ equation exactly.
 """
-function UpdateProbabilitiesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
+function UpdateProbabilitiesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters,
+    cache = counterfactual_cache(Baseline; p))
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
-    (; Πᵈ, Πᶠ, U̇ᵈ, U̇ᶠ, T) = Baseline
+    (; U̇ᵈ, U̇ᶠ, T) = Baseline
+    (; Πᵈ_dot, Πᶠ_dot) = cache
     Π̃ᵈ, Π̃ᶠ = CF.Πᵈ, CF.Πᶠ
 
-    Ûᵈ, Ûᶠ = CF.U̇ᵈ ./ U̇ᵈ, CF.U̇ᶠ ./ U̇ᶠ
     Π̃ᵈ_new, Π̃ᶠ_new = copy(Π̃ᵈ), copy(Π̃ᶠ)
+
+    Numᵈ, Numᶠ = zeros(N, N), zeros(N, N)
+    fᵈ, fᶠ     = zeros(1, N), zeros(1, N)
+    sᵈ, sᶠ     = zeros(N, 1), zeros(N, 1)
 
     for t in 1:T - 1
 
-        Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
-        Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        Π̃ᵈ_lag = t == 1 ? Πᵈ₋ : Π̃ᵈ[:, :, t - 1]
-        Π̃ᶠ_lag = t == 1 ? Πᶠ₋ : Π̃ᶠ[:, :, t - 1]
+        Π̃ᵈ_lag = t == 1 ? Πᵈ₋ : @view Π̃ᵈ[:, :, t - 1]
+        Π̃ᶠ_lag = t == 1 ? Πᶠ₋ : @view Π̃ᶠ[:, :, t - 1]
 
-        Πᵈ_dot = Πᵈ[:, :, t] ./ Πᵈ_lag
-        Πᶠ_dot = Πᶠ[:, :, t] ./ Πᶠ_lag
-        C      = cost_matrix(M̂[t], N)
+        # Û = CF.U̇ ./ Baseline.U̇, formed one column at a time rather than as a full N×T temporary
+        @views fᵈ .= (CF.U̇ᵈ[:, t + 1] ./ U̇ᵈ[:, t + 1])' .^ (β / νᵈ)
+        @views fᶠ .= (CF.U̇ᶠ[:, t + 1] ./ U̇ᶠ[:, t + 1])' .^ (β / νᶠ)
 
-        Numᵈ = Πᵈ_dot .* Π̃ᵈ_lag .* (Ûᵈ[:, t + 1] .^ (β / νᵈ))' .* C .^ (-1 / νᵈ)
-        Numᶠ = Πᶠ_dot .* Π̃ᶠ_lag .* (Ûᶠ[:, t + 1] .^ (β / νᶠ))' .* C .^ (-1 / νᶠ)
+        @views Numᵈ .= Πᵈ_dot[:, :, t] .* Π̃ᵈ_lag .* fᵈ
+        @views Numᶠ .= Πᶠ_dot[:, :, t] .* Π̃ᶠ_lag .* fᶠ
+        apply_cost_change!(Numᵈ, M̂[t], νᵈ, N)
+        apply_cost_change!(Numᶠ, M̂[t], νᶠ, N)
 
-        Π̃ᵈ_new[:, :, t] = Numᵈ ./ sum(Numᵈ, dims = 2)
-        Π̃ᶠ_new[:, :, t] = Numᶠ ./ sum(Numᶠ, dims = 2)
+        sum!(sᵈ, Numᵈ)
+        sum!(sᶠ, Numᶠ)
+
+        @views Π̃ᵈ_new[:, :, t] .= Numᵈ ./ sᵈ
+        @views Π̃ᶠ_new[:, :, t] .= Numᶠ ./ sᶠ
 
     end
 
@@ -58,38 +103,44 @@ counterfactual probabilities and the fixed Baseline. Returns a Soln whose U̇ᵈ
 the counterfactual's *actual* value changes (Ũ̇ = Û·U̇), not the hats themselves — Û is always
 recovered on demand as CF.U̇/Baseline.U̇, matching UpdateProbabilitiesHat's convention.
 """
-function UpdateChangesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
+function UpdateChangesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters,
+    cache = counterfactual_cache(Baseline; p))
 
     (; β, νᵈ, νᶠ, N, Πᵈ₋, Πᶠ₋) = p
-    (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, U̇ᵈ, U̇ᶠ, T) = Baseline
+    (; U̇ᵈ, U̇ᶠ, T) = Baseline
+    (; Πᵈ_dot, Πᶠ_dot, ẇᵈ, ẇᶠ) = cache
     Π̃ᵈ, Π̃ᶠ, W̃ᵈ, W̃ᶠ = CF.Πᵈ, CF.Πᶠ, CF.Wᵈ, CF.Wᶠ
 
     Ûᵈ_new, Ûᶠ_new = ones(N, T), ones(N, T)
 
+    Aᵈ, Aᶠ         = zeros(N, N), zeros(N, N)
+    fᵈ, fᶠ         = zeros(N), zeros(N)
+    innerᵈ, innerᶠ = zeros(N), zeros(N)
+
     for t in T - 1:-1:1
 
-        Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
-        Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        Π̃ᵈ_lag = t == 1 ? Πᵈ₋ : Π̃ᵈ[:, :, t - 1]
-        Π̃ᶠ_lag = t == 1 ? Πᶠ₋ : Π̃ᶠ[:, :, t - 1]
+        Π̃ᵈ_lag = t == 1 ? Πᵈ₋ : @view Π̃ᵈ[:, :, t - 1]
+        Π̃ᶠ_lag = t == 1 ? Πᶠ₋ : @view Π̃ᶠ[:, :, t - 1]
 
-        Πᵈ_dot = Πᵈ[:, :, t] ./ Πᵈ_lag
-        Πᶠ_dot = Πᶠ[:, :, t] ./ Πᶠ_lag
-        C      = cost_matrix(M̂[t], N)
+        @views fᵈ .= Ûᵈ_new[:, t + 1] .^ (β / νᵈ)
+        @views fᶠ .= Ûᶠ_new[:, t + 1] .^ (β / νᶠ)
 
-        innerᵈ = (Πᵈ_dot .* Π̃ᵈ_lag .* C .^ (-1 / νᵈ)) * (Ûᵈ_new[:, t + 1] .^ (β / νᵈ))
-        innerᶠ = (Πᶠ_dot .* Π̃ᶠ_lag .* C .^ (-1 / νᶠ)) * (Ûᶠ_new[:, t + 1] .^ (β / νᶠ))
+        @views Aᵈ .= Πᵈ_dot[:, :, t] .* Π̃ᵈ_lag
+        @views Aᶠ .= Πᶠ_dot[:, :, t] .* Π̃ᶠ_lag
 
-        ẇᵈ  = t == 1 ? ones(N) : Wᵈ[:, t] ./ Wᵈ[:, t - 1]
-        ẇ̃ᵈ = t == 1 ? ones(N) : W̃ᵈ[:, t] ./ W̃ᵈ[:, t - 1]
-        ẇᶠ  = t == 1 ? ones(N) : Wᶠ[:, t] ./ Wᶠ[:, t - 1]
-        ẇ̃ᶠ = t == 1 ? ones(N) : W̃ᶠ[:, t] ./ W̃ᶠ[:, t - 1]
+        # the inner sum with all costs at 1, then the one row whose costs actually change
+        mul!(innerᵈ, Aᵈ, fᵈ)
+        mul!(innerᶠ, Aᶠ, fᶠ)
+        innerᵈ[N] = inner_row_N(Aᵈ, fᵈ, M̂[t], νᵈ, N)
+        innerᶠ[N] = inner_row_N(Aᶠ, fᶠ, M̂[t], νᶠ, N)
 
-        ŵᵈ = ẇ̃ᵈ ./ ẇᵈ
-        ŵᶠ = ẇ̃ᶠ ./ ẇᶠ
-
-        Ûᵈ_new[:, t] = ŵᵈ .* innerᵈ .^ νᵈ
-        Ûᶠ_new[:, t] = ŵᶠ .* innerᶠ .^ νᶠ
+        @inbounds for i in 1:N
+            # ŵ = (counterfactual gross wage change) / (baseline's, precomputed); both are 1 at t = 1
+            ŵᵈ = t == 1 ? one(eltype(W̃ᵈ)) : (W̃ᵈ[i, t] / W̃ᵈ[i, t - 1]) / ẇᵈ[i, t]
+            ŵᶠ = t == 1 ? one(eltype(W̃ᶠ)) : (W̃ᶠ[i, t] / W̃ᶠ[i, t - 1]) / ẇᶠ[i, t]
+            Ûᵈ_new[i, t] = ŵᵈ * innerᵈ[i]^νᵈ
+            Ûᶠ_new[i, t] = ŵᶠ * innerᶠ[i]^νᶠ
+        end
 
     end
 
@@ -113,16 +164,17 @@ function SolveCounterfactual(M̂::Vector; Baseline::Soln, p::Parameters,
     CF_tol::Real = 1e-4, CF_maxiter::Integer = 10_000, verbose::Bool = true)
 
     CF = deepcopy(Baseline)
+    cache = counterfactual_cache(Baseline; p)
     err, prev_err, iter, α = 1 + CF_tol, Inf, 0, 0.5
 
     while err > CF_tol && iter < CF_maxiter
 
         Ûᵈ_prev, Ûᶠ_prev = CF.U̇ᵈ ./ Baseline.U̇ᵈ, CF.U̇ᶠ ./ Baseline.U̇ᶠ
 
-        CF = UpdateProbabilitiesHat(CF, Baseline, M̂; p)
+        CF = UpdateProbabilitiesHat(CF, Baseline, M̂; p, cache)
         CF = UpdateLaborSupply(CF; p)
         CF = SolveTempEq(CF; p, verbose = verbose && iter % 50 == 0)
-        CF = UpdateChangesHat(CF, Baseline, M̂; p)
+        CF = UpdateChangesHat(CF, Baseline, M̂; p, cache)
 
         Ûᵈ_new, Ûᶠ_new = CF.U̇ᵈ ./ Baseline.U̇ᵈ, CF.U̇ᶠ ./ Baseline.U̇ᶠ
         err   = max(maximum(abs.(Ûᵈ_new .- Ûᵈ_prev)), maximum(abs.(Ûᶠ_new .- Ûᶠ_prev)))
