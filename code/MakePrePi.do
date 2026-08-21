@@ -175,12 +175,26 @@ append using `newobs'
 sort Origin Destination
 
 ********************** Calculate the Pi's *************************
-gen pi_Foreign  = Foreign  / Supply_Foreign 
-gen pi_Domestic = Domestic / Supply_Domestic
+* Floor unobserved (zero) flows at half the smallest flow actually observed
+* anywhere in the sample, then convert to a probability. A fixed *probability*
+* floor (the previous approach: 1e-4) is mis-scaled for the "ROW" origin, whose
+* Supply_Foreign denominator (global population net of the US) is ~5.67
+* billion: a 1e-4 probability floor there implies an annual flow of ~567,000
+* people into any zero-observed-flow state -- an order of magnitude above the
+* largest *observed* ROW-origin flow (57,133), and it alone ends up driving
+* ~98% of the model's total ROW-to-US inflow. Flooring the flow instead keeps
+* every implied floor on the same small, economically sensible scale
+* regardless of the origin's stock size.
+qui summ Foreign  if Foreign  > 0
+loc flow_floor_F = r(min)
+qui summ Domestic if Domestic > 0
+loc flow_floor_D = r(min)
+loc flow_floor = min(`flow_floor_F', `flow_floor_D') / 2
 
-* Floor for natural zeros (no observed flow to a US destination)
-replace pi_Foreign  = 1e-4 if pi_Foreign  == 0 
-replace pi_Domestic = 1e-4 if pi_Domestic == 0
+gen pi_Foreign  = Foreign  / Supply_Foreign
+gen pi_Domestic = Domestic / Supply_Domestic
+replace pi_Foreign  = `flow_floor' / Supply_Foreign  if Foreign  == 0
+replace pi_Domestic = `flow_floor' / Supply_Domestic if Domestic == 0
 
 * If observed outflow rates sum to > 0.99 for an origin, rescale proportionally
 * so the sum equals 0.99, leaving at least 0.01 probability for ROW and probabilities sum to one
