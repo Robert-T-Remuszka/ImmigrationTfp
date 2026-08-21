@@ -506,6 +506,17 @@ end
                         DIAGNOSTICS
 ================================================================#
 """
+Recover the converged CES task-labor aggregate L(l, t) implied by a solved Soln — the
+foreign/domestic task shares λ come from the same TaskAggregates_μ call ComputeZ uses.
+"""
+function ComputeL(S::Soln; p::Parameters)
+
+    λ = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :λ)
+    return LaborAggregate.(λ, p.ρ, S.Lᶠ, S.Lᵈ)
+
+end
+
+"""
 Recover the converged task-productivity series Z(l, t) implied by a solved Soln.
 """
 ComputeZ(S::Soln; p::Parameters) = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :Z)
