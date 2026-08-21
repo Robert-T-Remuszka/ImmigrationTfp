@@ -39,6 +39,50 @@ framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`
 EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year) wt(emp) impulse(fg) ///
 framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
+/*****************************
+    SAVE IRF ESTIMATES (Iv1990 baseline) FOR JULIA'S INDIRECT INFERENCE
+*****************************/
+/* Stacks copies of the four Iv1990 frames (Z, Wage_Foreign, Wage_Domestic, L) into one
+   long (outcome, h) panel and saves it -- operates on COPIES, not the originals, since
+   the PLOTS section below still needs Beta_Iv1990/Se_Iv1990/F_Iv1990 by name to build
+   the response-function and first-stage-F figures for both Iv1990 and Iv1990_LOO.
+   Only the Iv1990 baseline is saved; Iv1990_LOO stays a plot-only robustness check. */
+tempfile IRFStack
+loc n = 0
+foreach v in `vars' {
+    cap frame drop IRFtmp
+    frame copy `v'_Iv1990 IRFtmp
+    frame IRFtmp {
+        gen str14 outcome = "`v'"
+        ren Beta_Iv1990 beta
+        ren Se_Iv1990   se
+        ren F_Iv1990    Fstat
+        keep outcome h beta se Fstat
+        order outcome h beta se Fstat
+        loc ++n
+        if `n' == 1 save `IRFStack', replace
+        else {
+            append using `IRFStack'
+            save `IRFStack', replace
+        }
+    }
+    frame drop IRFtmp
+}
+
+cap frame drop IRFEstimates
+frame create IRFEstimates
+frame IRFEstimates {
+    use `IRFStack', clear
+    sort outcome h
+    la var outcome "Outcome variable: Z, L, Wage_Domestic or Wage_Foreign"
+    la var h       "Horizon (years since the migration shock, 0-9)"
+    la var beta    "LPIV coefficient, Iv1990 (Bartik) instrument"
+    la var se      "Driscoll-Kraay SE (band `dkraayband'), Iv1990"
+    la var Fstat   "First-stage Kleibergen-Paap/Wald F-stat, Iv1990"
+    save "${Data}/IRFEstimates.dta", replace
+}
+frame drop IRFEstimates
+
 * Look at the LOO Bartik
 EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Z fg)) absorb(year) wt(emp) impulse(fg) ///
 framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)

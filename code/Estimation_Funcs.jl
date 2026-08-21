@@ -10,8 +10,10 @@
 # innovation SD) are not estimated this way: they're identified only through
 # their effect on the dynamics of migration flows, wages and productivity, so
 # they require indirect inference against the paper's section-4 LPIV impulse
-# responses. That Stata estimation doesn't exist yet -- load_irf_estimates()
-# below is a placeholder for whatever eventually produces it.
+# responses (Z, L, Wage_Domestic, Wage_Foreign to the Bartik/Iv1990 migration
+# shock). MakeIRF.do estimates those and saves the Iv1990 baseline (not the
+# Iv1990_LOO robustness check) to IRFEstimates.dta; load_irf_estimates() below
+# packages that the same way load_scale_estimate() packages the ν's.
 
 using DataFrames, StatFiles
 
@@ -35,14 +37,19 @@ function load_scale_estimate()
 end
 
 """
-Placeholder for the future handoff of the section-4 LPIV impulse responses
-(Z, L, wᴰ, wᶠ to a migration shock) into Julia, for indirect-inference
-estimation of (ψ, σ). Not yet built -- no Stata script produces these IRFs
-for this paper yet (distinct from the older MakeIRF.do, which estimates a
-different paper's Bartik/TFP design).
+Load the section-4 LPIV impulse responses (Iv1990 baseline only) from
+MakeIRF.do's saved IRFEstimates.dta. Returns a Dict keyed by outcome name
+("Z", "L", "Wage_Domestic", "Wage_Foreign"), each holding the horizon-ordered
+vectors (h, β, se, F) needed to target these moments in indirect inference.
 """
 function load_irf_estimates()
 
-    error("load_irf_estimates: not yet implemented -- the section 4 LPIV Stata script doesn't exist yet")
+    df = DataFrame(load(joinpath(data, "IRFEstimates.dta")))
+    sort!(df, [:outcome, :h])
+
+    return Dict(
+        first(g.outcome) => (h = g.h, β = g.beta, se = g.se, F = g.Fstat)
+        for g in groupby(df, :outcome)
+    )
 
 end
