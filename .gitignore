@@ -13,7 +13,9 @@ code/Credentials.py
 ltex.dictionary.en-US.txt
 *.jld2
 *.out
+*.log
 bartik_weight.ado
 ._bartik_weight.ado
 IRS Statistics of Income.png
 World Bank GNI.png
+Nu_Derivation.md
