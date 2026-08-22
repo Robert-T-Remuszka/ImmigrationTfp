@@ -210,12 +210,16 @@ summ e_lhs_D e_x_D e_lhs_F e_x_F
 ivreghdfe lhs_D (ln_wage_ratio_D = ln_wage_ratio_D_lag ln_pi_ratio_D_lag2) ///
     if `restrict_D', absorb(pairid) cluster(pairid) first endog(ln_wage_ratio_D)
 
+loc N_D_iv = e(N)
+loc dwhp_D = e(estatp)  // DWH endogeneity test p-value from endog()
+
 nlcom (nu_D: `bta' / _b[ln_wage_ratio_D])
 loc betaOverNu_D = _b[ln_wage_ratio_D]
 loc seBoN_D      = _se[ln_wage_ratio_D]
 loc nu_D = `bta' / `betaOverNu_D'
 
 reghdfe lhs_D ln_wage_ratio_D if `restrict_D', absorb(pairid) cluster(pairid)
+loc N_D_ols = e(N)
 loc betaOverNu_D_ols = _b[ln_wage_ratio_D]
 loc nu_D_ols = `bta' / `betaOverNu_D_ols'
 reghdfe lhs_D ln_wage_ratio_D_lag ln_pi_ratio_D_lag2 if `restrict_D', ///
@@ -225,12 +229,16 @@ reghdfe lhs_D ln_wage_ratio_D_lag ln_pi_ratio_D_lag2 if `restrict_D', ///
 ivreghdfe lhs_F (ln_wage_ratio_F = ln_wage_ratio_F_lag ln_pi_ratio_F_lag2) ///
     if `restrict_F', absorb(pairid) cluster(pairid) first endog(ln_wage_ratio_F)
 
+loc N_F_iv = e(N)
+loc dwhp_F = e(estatp)  // DWH endogeneity test p-value from endog()
+
 nlcom (nu_F: `bta' / _b[ln_wage_ratio_F])
 loc betaOverNu_F = _b[ln_wage_ratio_F]
 loc seBoN_F      = _se[ln_wage_ratio_F]
 loc nu_F = `bta' / `betaOverNu_F'
 
 reghdfe lhs_F ln_wage_ratio_F if `restrict_F', absorb(pairid) cluster(pairid)
+loc N_F_ols = e(N)
 loc betaOverNu_F_ols = _b[ln_wage_ratio_F]
 loc nu_F_ols = `bta' / `betaOverNu_F_ols'
 
@@ -266,3 +274,37 @@ la var betaOverNu_hat "IV estimate of β/ν^n (pair FE, 2 lagged instruments), A
 la var betaOverNu_ols "OLS estimate of β/ν^n, same sample and pair FE -- THE ONE WE USE (see header: DWH doesn't reject OLS==IV on either nativity)"
 
 save "${Data}/NuBetaEstimatesAcs.dta", replace
+
+/******************* WRITE DWH TABLE (booktabs) ******************************/
+/* Wide table: OLS and IV each report (ν^D, ν^F); N per model; DWH p-value
+   (only meaningful for IV, blank under OLS). */
+loc s_nu_D_ols = string(`nu_D_ols', "%9.3f")
+loc s_nu_F_ols = string(`nu_F_ols', "%9.3f")
+loc s_nu_D_iv  = string(`nu_D',     "%9.3f")
+loc s_nu_F_iv  = string(`nu_F',     "%9.3f")
+loc s_N_D_ols  = string(`N_D_ols', "%12.0fc")
+loc s_N_F_ols  = string(`N_F_ols', "%12.0fc")
+loc s_N_D_iv   = string(`N_D_iv',  "%12.0fc")
+loc s_N_F_iv   = string(`N_F_iv',  "%12.0fc")
+loc s_dwhp_D   = string(`dwhp_D', "%9.3f")
+loc s_dwhp_F   = string(`dwhp_F', "%9.3f")
+
+file open dwhtable using "${Tables}/DWHTest.tex", write replace
+file write dwhtable "{" _n
+file write dwhtable "\begin{tabular}{lcccc}" _n
+file write dwhtable "\toprule" _n
+file write dwhtable "            &\multicolumn{2}{c}{OLS}&\multicolumn{2}{c}{IV}\\\cmidrule(lr){2-3}\cmidrule(lr){4-5}" _n
+file write dwhtable "            &\$\nu^D\$&\$\nu^F\$&\$\nu^D\$&\$\nu^F\$\\" _n
+file write dwhtable "\midrule" _n
+file write dwhtable "\addlinespace" _n
+file write dwhtable "            &`s_nu_D_ols'&`s_nu_F_ols'&`s_nu_D_iv'&`s_nu_F_iv'\\" _n
+file write dwhtable "\midrule" _n
+file write dwhtable "Observations    &`s_N_D_ols'&`s_N_F_ols'&`s_N_D_iv'&`s_N_F_iv'\\" _n
+file write dwhtable "DWH \$p\$-value &            &            &`s_dwhp_D'&`s_dwhp_F'\\" _n
+file write dwhtable "\addlinespace" _n
+file write dwhtable "\bottomrule" _n
+file write dwhtable "\end{tabular}" _n
+file write dwhtable "}" _n
+file close dwhtable
+
+di as text "Wrote ${Tables}/DWHTest.tex"
