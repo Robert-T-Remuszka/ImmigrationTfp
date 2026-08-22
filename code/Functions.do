@@ -4,12 +4,18 @@ IRFs using LP.
 ************************************************************************************************************************************************************/
 program PreRegProcessing
 
-    * Total employment
+    * Total employment, and the national total (used both for the migration-flow regressor's
+    * N_{t-1} normalization just below, and later for the Bartik LOO shifts)
     gen emp = Supply_Total
+    egen emp_agg = total(emp), by(year)
 
-    * Generate foreign-born labor share and its growth rate
+    * Generate the foreign-born labor stock and the migration-flow regressor: the level
+    * change in the foreign-born stock scaled by the national labor force in the PRIOR
+    * period, N_{t-1} (eq. (4.4)) -- not a log-growth rate. (4.5)/(4.6)'s decomposition into
+    * 1990-share-weighted national group growth rates is an exact algebraic identity only for
+    * this unlogged, N_{t-1}-normalized flow; it would not hold for a log-difference.
     gen f = Supply_Foreign
-    bys statefip (year): gen fg = log(f) - log(f[_n-1])
+    bys statefip (year): gen fg = (f - f[_n-1]) / emp_agg[_n-1]
 
     * Calculate the shares
     qui ds Supply_*
@@ -51,8 +57,7 @@ program PreRegProcessing
 
     }
 
-    * Create aggregate shifts
-    egen emp_agg = total(emp), by(year)
+    * Create aggregate shifts (emp_agg itself was already built above, ahead of fg)
     gen  emp_agg_LOO = emp_agg - emp
     ds Supply_*
     foreach v in `r(varlist)' {
