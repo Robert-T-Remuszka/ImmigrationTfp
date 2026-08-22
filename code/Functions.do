@@ -25,12 +25,23 @@ program PreRegProcessing
 
     }
 
-    * Create fixed 1990 shares
+    * Create fixed 1990 shares. Denominator is the TOTAL US labor force in 1990 (Card
+    * (2001)'s original shift-share normalization) -- one national scalar shared by every
+    * state -- not each state's own local 1990 employment stock, which was the bug here
+    * before: rowtotal(`vars1990') is a per-state total, so dividing by it just recovers
+    * each state's own within-state composition shares (which sum to 1 for every state),
+    * not a share of the national total.
     qui ds *1990
     loc vars1990 "`r(varlist)'"
-    egen emp1990 = rowtotal(`vars1990')
+    egen emp1990_state = rowtotal(`vars1990')
+    bys statefip (year): gen byte first = _n == 1
+    qui summ emp1990_state if first
+    loc emp1990_natl = r(sum)
+    drop first emp1990_state
+    gen emp1990 = `emp1990_natl'
+
     foreach v in `vars1990' {
-        
+
         loc region = subinstr("`v'", "1990", "", 1)
 
         if "`region'" != "US" {
