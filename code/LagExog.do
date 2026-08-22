@@ -10,7 +10,6 @@ loc samp inrange(year, 1994, 2021)
 * Construct the Bartik instruments and left hand side variables - See Functions.do
 qui PreRegProcessing
 sort state year
-loc dkraayband 9
 loc instrument Bartik_1990
 
 /*******
@@ -25,7 +24,7 @@ loc vlabs ""
 loc maxlagtest 3
 foreach lag of numlist 1/`maxlagtest' {
     
-    eststo m`lag': qui ivreg2 `instrument' l(1/`lag').fg i.year [pw = emp] if `samp', dkraay(`dkraayband') partial(i.year)
+    eststo m`lag': qui ivreg2 `instrument' l(1/`lag').fg i.year [pw = emp] if `samp', cluster(state)
     
     loc models "`models' m`lag'"
     if `lag' > 1 loc vlabs `vlabs' L`lag'.fg  "Lag `lag' of migration flow"
@@ -38,6 +37,6 @@ la var fg "Lag 0 of migration flow"
 esttab `models' using "${Tables}/Lag_exog.tex", replace booktabs varlabels(`vlabs') se label ///
 stats(N r2_a, fmt(%6.0fc %9.3f %9.3f)) nonum ///
 subs("Standard errors in parentheses" ///
-"Driscoll-Kraay standard errors with bandwidth set to `dkraayband'. All regressions include year fixed effects." ///
+"Standard errors clustered by state. All regressions include year fixed effects." ///
 "N" "Observations" "r2_a" "Adj. \$R^2$") star(* 0.1 ** 0.05 *** 0.01) keep(L.fg L2.fg L3.fg)
 

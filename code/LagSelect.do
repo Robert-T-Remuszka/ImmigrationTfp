@@ -13,9 +13,8 @@ loc highlight 0
 **********************************************************/
 loc maxlag 4
 loc sampstart = 1995 + `maxlag'
-loc vars "Z Wage_Domestic Wage_Foreign L fg Supply_Domestic"
+loc vars "Z Wage_Domestic Wage_Foreign L fg"
 loc K : word count `vars'
-loc dkraayband 9
 
 matrix BIC = J(`maxlag' + 1, `K', .)
 loc rownames ""
@@ -24,8 +23,7 @@ forv p = 1/`maxlag' {
 }
 matrix rownames BIC = `rownames' "N"
 matrix colnames BIC = "\$\Delta^0\ln{Z_{l,t}}\$" "\$\Delta^0\ln{w^D_{l,t}}\$" ///
-"\$\Delta^0\ln{w^F_{l,t}}\$" "\$\Delta^0\ln{L_{l,t}}\$" "\$\Delta^0\ln{L^D_{l,t}}\$" ///
-"\$\Delta^0\ln{L^F_{l,t}}\$"
+"\$\Delta^0\ln{w^F_{l,t}}\$" "\$\Delta^0\ln{L_{l,t}}\$" "\$\Delta^0L^F_{l,t}/N_{l,t-1}\$"
 
 /*****
 Generate variables in the reduced form VAR representation - add them to a local
