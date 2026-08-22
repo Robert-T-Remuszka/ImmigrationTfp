@@ -10,10 +10,13 @@ loc samp inrange(year, 1994, 2021)
 * Construct the Bartik instruments and left hand side variables - See Functions.do
 qui PreRegProcessing
 
-loc dkraayband 9
-loc depvarlags 2
-loc ivlags     2
-loc se_spec dkraay(`dkraayband') partial(i.year)
+loc depvarlags 3   // outcome's own lags, matching LagSelect.tex's BIC-preferred lag order
+loc fglags     `depvarlags'   // fg's own lags, also BIC-preferred per LagSelect.tex
+loc ivlags     `depvarlags'   // Bartik's own lags; significant at all three per LagExog.tex
+
+* Standard errors clustered by state (Peri 2012's convention for this design), since
+* residuals are persistent within state over time.
+loc se_spec cluster(state)
 
 * Generate macro containing first-differenced variables
 loc vars "Z Wage_Domestic Wage_Foreign L"
@@ -27,16 +30,16 @@ foreach v in `vars' {
     Estimate Responses
 *****************************/
 * Start with the standard Bartik
-EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0Z fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').D0Z L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Z_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0Wage_Foreign fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').D0Wage_Foreign L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Wage_Foreign_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0Wage_Domestic fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').D0Wage_Domestic L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Wage_Domestic_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
-EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990) depvarlags(L(1/`depvarlags').D0L L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(L_Iv1990) suffix(Iv1990) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990)
 
 /*****************************
@@ -77,23 +80,23 @@ frame IRFEstimates {
     la var outcome "Outcome variable: Z, L, Wage_Domestic or Wage_Foreign"
     la var h       "Horizon (years since the migration shock, 0-9)"
     la var beta    "LPIV coefficient, Iv1990 (Bartik) instrument"
-    la var se      "Driscoll-Kraay SE (band `dkraayband'), Iv1990"
+    la var se      "State-clustered SE, Iv1990"
     la var Fstat   "First-stage Kleibergen-Paap/Wald F-stat, Iv1990"
     save "${Data}/IRFEstimates.dta", replace
 }
 frame drop IRFEstimates
 
 * Look at the LOO Bartik
-EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Z fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Z , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').D0Z L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Z_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)
 
-EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Wage_Foreign fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Foreign , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').D0Wage_Foreign L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Wage_Foreign_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)
 
-EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0Wage_Domestic fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF Wage_Domestic , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').D0Wage_Domestic L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(Wage_Domestic_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)
 
-EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').(D0L fg)) absorb(year) wt(emp) impulse(fg) ///
+EstimateIRF L , endogenous(fg) instruments(Bartik_1990_LOO) depvarlags(L(1/`depvarlags').D0L L(1/`fglags').fg) absorb(year) wt(emp) impulse(fg) ///
 framename(L_Iv1990_LOO) suffix(Iv1990_LOO) samp(`samp') horizon(9) se_spec(`se_spec') exogenous(L(1/`ivlags').Bartik_1990_LOO)
 
 /*****************************

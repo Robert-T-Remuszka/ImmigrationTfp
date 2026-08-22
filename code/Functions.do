@@ -4,18 +4,17 @@ IRFs using LP.
 ************************************************************************************************************************************************************/
 program PreRegProcessing
 
-    * Total employment, and the national total (used both for the migration-flow regressor's
-    * N_{t-1} normalization just below, and later for the Bartik LOO shifts)
+    * Local total employment, and its national total (used below for the Bartik LOO shifts)
     gen emp = Supply_Total
     egen emp_agg = total(emp), by(year)
 
-    * Generate the foreign-born labor stock and the migration-flow regressor: the level
-    * change in the foreign-born stock scaled by the national labor force in the PRIOR
-    * period, N_{t-1} (eq. (4.4)) -- not a log-growth rate. (4.5)/(4.6)'s decomposition into
-    * 1990-share-weighted national group growth rates is an exact algebraic identity only for
-    * this unlogged, N_{t-1}-normalized flow; it would not hold for a log-difference.
+    * Migration-flow regressor: the level change in the foreign-born stock, scaled by the
+    * local labor force in the prior period, N_{l,t-1} (eq. 4.4). This matches the
+    * normalization in Card (2001) and Peri (2012), and is required for (4.5)/(4.6)'s
+    * share-weighted decomposition to be an exact identity (the shares below use this same
+    * denominator).
     gen f = Supply_Foreign
-    bys statefip (year): gen fg = (f - f[_n-1]) / emp_agg[_n-1]
+    bys statefip (year): gen fg = (f - f[_n-1]) / emp[_n-1]
 
     * Calculate the shares
     qui ds Supply_*
@@ -31,20 +30,14 @@ program PreRegProcessing
 
     }
 
-    * Create fixed 1990 shares. Denominator is the TOTAL US labor force in 1990 (Card
-    * (2001)'s original shift-share normalization) -- one national scalar shared by every
-    * state -- not each state's own local 1990 employment stock, which was the bug here
-    * before: rowtotal(`vars1990') is a per-state total, so dividing by it just recovers
-    * each state's own within-state composition shares (which sum to 1 for every state),
-    * not a share of the national total.
+    * Fixed 1990 shares: s_{m,l,1990} = L^F_{m,l,1990}/N_{l,1990}, state l's own local 1990
+    * labor force (eq. 4.5/4.6), matching Card (2001) and Peri (2012). rowtotal(`vars1990')
+    * sums every *1990 column (all origin-region stocks plus US1990, the domestic count)
+    * within a state, giving that state's own 1990 total labor force -- the same concept
+    * `emp` measures contemporaneously, and the same denominator fg uses above.
     qui ds *1990
     loc vars1990 "`r(varlist)'"
-    egen emp1990_state = rowtotal(`vars1990')
-    bys statefip (year): gen byte first = _n == 1
-    qui summ emp1990_state if first
-    loc emp1990_natl = r(sum)
-    drop first emp1990_state
-    gen emp1990 = `emp1990_natl'
+    egen emp1990 = rowtotal(`vars1990')
 
     foreach v in `vars1990' {
 
@@ -57,7 +50,7 @@ program PreRegProcessing
 
     }
 
-    * Create aggregate shifts (emp_agg itself was already built above, ahead of fg)
+    * Create aggregate shifts
     gen  emp_agg_LOO = emp_agg - emp
     ds Supply_*
     foreach v in `r(varlist)' {
@@ -68,11 +61,13 @@ program PreRegProcessing
             
             replace `v' = 0 if mi(`v')
             egen Supply_Agg_`region' = total(`v'), by(year)
-            bys statefip (year): gen fg_agg_`region' = log(Supply_Agg_`region') - log(Supply_Agg_`region'[_n-1])
-            
+            * National growth rate for group `region', lagged denominator, matching the
+            * instrument definition in eq. (4.5)-(4.6)
+            bys statefip (year): gen fg_agg_`region' = (Supply_Agg_`region' - Supply_Agg_`region'[_n-1]) / Supply_Agg_`region'[_n-1]
+
             * LOO
             gen Supply_Agg_`region'_LOO = Supply_Agg_`region' - `v'
-            bys statefip (year): gen fg_agg_LOO_`region' = log(Supply_Agg_`region'_LOO) - log(Supply_Agg_`region'_LOO[_n-1])
+            bys statefip (year): gen fg_agg_LOO_`region' = (Supply_Agg_`region'_LOO - Supply_Agg_`region'_LOO[_n-1]) / Supply_Agg_`region'_LOO[_n-1]
             drop Supply_Agg_`region'_LOO
 
         }
