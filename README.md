@@ -30,20 +30,25 @@ There are several files that combine these raw data sources to create a panel of
     * [Read and save ACS extract](code/AcsRead.ipynb), [Read and save CPS extract](code/CpsRead.ipynb)
 3. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
     * Output(s): ```data/StateAnalysisPreTfp.dta```
-4. [**Estimate Production Function**](code/ProdFunc_Estimate.jl)
+4. [**Construct ACS Migration-Flow Panel**](code/MakeAcsPi.do)
+    * Output: ```data/AcsPiPanel.dta```
+5. [**Construct Individual ACS Data**](code/MakeIndividualAnalysis.do)
+    * Output: ```data/IndividualCpAnalysis.dta```
+6. [**Estimate Scale Parameters.**](code/EstimateScaleBetaAcs.do)
+    * Input(s): ```data/AcsPiPanel.dta```
+    * Output(s): ```data/NuBetaEstimatesAcs.dta```
+7. [**Estimate CA Parameters**](code/EstimateCp.do)
+    * Input(s): ```data/IndividualCpAnalysis.dta```
+    * Output(s): ```data/CpEstimates.dta```
+8. [**Estimate Production Function**](code/ProdFunc_Estimate.jl)
     * [Asscoiated Types and Functions](code/ProdFunc.jl)
     * Input(s): ```data/StateAnalysisPreTfp.dta```
     * Output(s): ```data/StateTfpAndTaskAgg.csv```, ```ProductionFunction.jld2```
-5. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
+9. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
     * Input(s): ```data/StateTfpAndTaskAgg.csv```
     * Output(s): ```data/StateAnalysis.dta```
-6. [**Estimate Empirical IRFs**](code/MakeIRF.do)
+10. [**Estimate Empirical IRFs**](code/MakeIRF.do)
     * Input(s): ```data/StateAnalysis.dta```
     * Output(s): Some plots and ```IRFEstimates.dta```
-7. [**Construct Initial Migration Flows**](code/MakePrePi.do)
+11. [**Construct Initial Migration Flows**](code/MakePrePi.do)
     * Output: ```data/PiMat.dta```
-8. [**Construct ACS Migration-Flow Panel**](code/MakeAcsPi.do)
-    * Output: ```data/AcsPiPanel.dta```
-9. [**Estimate Scale Parameters.**](code/EstimateScaleBetaAcs.do)
-    * Input(s): ```data/AcsPiPanel.dta```
-    * Output(s): ```data/NuBetaEstimatesAcs.dta```
