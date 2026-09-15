@@ -40,15 +40,18 @@ There are several files that combine these raw data sources to create a panel of
 7. [**Estimate CA Parameters**](code/EstimateCp.do)
     * Input(s): ```data/IndividualCpAnalysis.dta```
     * Output(s): ```data/CpEstimates.dta```
-8. [**Estimate Production Function**](code/ProdFunc_Estimate.jl)
-    * [Asscoiated Types and Functions](code/ProdFunc.jl)
-    * Input(s): ```data/StateAnalysisPreTfp.dta```
-    * Output(s): ```data/StateTfpAndTaskAgg.csv```, ```ProductionFunction.jld2```
-9. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
+8. [**Estimate EOS**](code/AggSupply_Estimate.jl) (ρ, via the factor-share condition)
+    * [Associated Types and Functions](code/AggSupply_Functions.jl)
+    * Input(s): ```data/CpEstimates.dta```, ```data/StateAnalysisPreTfp.dta```
+    * Output(s): ```data/StateTfpAndTaskAgg.csv```, ```AggSupply.jld2```
+9. [**Calibrate State Capital Shares**](code/CalibrateTheta.do) (θ_l, δ_l)
+    * Input(s): ```data/CapByState/state_capital_yesdata21.dta```, ```data/StateAnalysisPreTfp.dta```
+    * Output(s): ```data/ThetaDelta.dta```
+10. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
     * Input(s): ```data/StateTfpAndTaskAgg.csv```
     * Output(s): ```data/StateAnalysis.dta```
-10. [**Estimate Empirical IRFs**](code/MakeIRF.do)
+11. [**Estimate Empirical IRFs**](code/MakeIRF.do)
     * Input(s): ```data/StateAnalysis.dta```
     * Output(s): Some plots and ```IRFEstimates.dta```
-11. [**Construct Initial Migration Flows**](code/MakePrePi.do)
+12. [**Construct Initial Migration Flows**](code/MakePrePi.do)
     * Output: ```data/PiMat.dta```
