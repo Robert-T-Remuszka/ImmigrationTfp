@@ -7,22 +7,13 @@ include("AggSupply_Functions.jl")
 
 #=================================================================
 Estimates rho (the CES parameter between the domestic and foreign task
-aggregates) from the model's own factor-share condition,
+aggregates) from the model's factor-share condition,
     s^F_lt = w^F_lt*L^F_lt / (w^F_lt*L^F_lt + w^D_lt*L^D_lt) = lambda^(1-rho)*(L^F_lt/L_lt)^rho,
--- (mu_z, xi_omega, xi_z) are fixed/known in advance from EstimateCp.do, so rho
-is the ONLY parameter estimated here. No output (Y), capital (K), or theta_l
-data enter this equation at all -- deliberately: the earlier attempt to read
-rho off the production function itself (ln Y = theta_l ln K + (1-theta_l)(ln Z
-+ ln L)) turned out to be structurally degenerate (lambda collapses to a
-corner past ~rho=0.915 whenever xi_omega > xi_z, which it does here), and the
-factor-share condition sidesteps that failure mode entirely: it's a ratio
-identity derived directly from the two labor-market-clearing conditions
-(3.7)-(3.8), with every level term (P, Z^rho, (ZL)^(1-rho)) canceling out.
-See notes/EstimationProductionBlock.md for the full derivation and the
-diagnosis of why the output-equation route failed.
+(mu_z, xi_omega, xi_z) are fixed/known in advance from EstimateCp.do, so rho
+is the only parameter estimated here.
 =================================================================#
 
-# %% 1. Fixed parameters from the prior estimating equation (NOT re-estimated here)
+# %% 1. Fixed parameters from the prior estimating equation
 cp = load_cp_estimate()
 println("Fixed from EstimateCp.do: μ_z=", cp.μ_z, " ξ_ω=", cp.ξ_ω, " ξ_z=", cp.ξ_z)
 
@@ -44,6 +35,7 @@ w  = wD ./ wF
 
 sF_data = (wF .* LF) ./ (wF .* LF .+ wD .* LD)
 
+# Print up a little summary of the data for the user
 println("N obs = ", length(w), "  N states = ", length(unique(StateAnalysis.statefip)))
 println("relative wage w: min=", minimum(w), " max=", maximum(w))
 println("observed s^F: min=", minimum(sF_data), " max=", maximum(sF_data), " mean=", mean(sF_data))
@@ -71,9 +63,7 @@ for ρ in 0.05:0.05:0.95
     println("ρ=", round(ρ, digits = 2), "  SSR=", round(ssr(ρ), digits = 4))
 end
 
-# %% 5. NLS for ρ (Brent, 1-D). ρ ∈ (0,1) is the model's own maintained domain
-# (paper eqn 2.1), not merely a numerical guardrail -- see EstimationProductionBlock.md
-# decision 7.
+# %% 5. NLS for ρ (Brent, 1-D). ρ ∈ (0,1) the model's own maintained domain
 fit = Optim.optimize(ssr, 0.01, 0.99, Optim.Brent())
 ρ̂   = Optim.minimizer(fit)
 
@@ -124,7 +114,7 @@ let
     println("max|d₁+d₂-bξ| = ", maximum(checks), " (should be ~0)")
 end
 
-# %% 8. Persist -- single source of truth for downstream Parameters()
+# %% 8. Save to jld2 for future use in model solver
 p_star = (ρ = ρ̂, se_ρ = se_ρ,
           μ_z = cp.μ_z, ξ_ω = cp.ξ_ω, ξ_z = cp.ξ_z,
           se_μ_z = cp.se_μ_z, se_ξ_ω = cp.se_ξ_ω, se_ξ_z = cp.se_ξ_z,
@@ -133,9 +123,7 @@ jldsave(joinpath(@__DIR__, "AggSupply.jld2"); p_star)
 println()
 println("Saved p_star = ", p_star, " to AggSupply.jld2")
 
-# %% 9. Compute-and-export Z, L, λ (handed to MakeStateAnalysis.do -> MakeIRF.do).
-# This is a pure evaluation of already-fixed/estimated parameters, not a fit --
-# nothing here is being estimated.
+# %% 9. Compute-and-export Z, L, λ (handed to MakeStateAnalysis.do -> MakeIRF.do)
 out = DataFrame(statefip = StateAnalysis.statefip, year = StateAnalysis.year,
                  Z = Z, L = L, lambda = λ)
 CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), out)
