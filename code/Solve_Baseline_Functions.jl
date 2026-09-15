@@ -4,7 +4,7 @@
 """
 Parameters governing the baseline (factual, no-quota) sequential equilibrium.
 Production parameters (ρ, μ_z, ξ_ω, ξ_z) are the log-normal task-assignment
-parameterization (Assumption A4): (μ_z, ξ_ω, ξ_z) come from EstimateCp.do's
+parameterization: (μ_z, ξ_ω, ξ_z) come from EstimateCp.do's
 producer choice-probability probit, ρ from AggSupply_Estimate.jl's factor-share
 NLS -- see AggSupply_Functions.jl, which supplies the task-integral math
 (TaskAggregates_LN, LaborAggregate) this struct's `TaskAggregates` wraps.
@@ -20,9 +20,9 @@ struct Parameters{T1 <: Real, T2 <: Integer}
 
     β::T1                                       # HH discount rate
     r::T1                                       # Capital rental rate
-    δ::Vector{T1}                                # Capital depreciation rate by location (El-Shagi-Yamarik; NaN for Rest-of-World)
+    δ::Vector{T1}                               # Capital depreciation rate by location (El-Shagi-Yamarik; NaN for Rest-of-World)
     ρ::T1                                       # CES parameter between foreign/domestic task aggregates
-    θ::Vector{T1}                                # Capital share by location, (r+δ_l)·K/Y, from the capital FOC (NaN for Rest-of-World)
+    θ::Vector{T1}                               # Capital share by location, (r+δ_l)·K/Y, from the capital FOC (NaN for Rest-of-World)
     μ_z::T1                                     # Location of ln z(τ) = μ_z + ξ_z·Φ⁻¹(τ)
     ξ_ω::T1                                     # SD of ln ω ~ N(0, ξ_ω²)  [μ_ω ≡ 0, Assumption A4]
     ξ_z::T1                                     # SD of the comparative-advantage schedule ln z(τ)
