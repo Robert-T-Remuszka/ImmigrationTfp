@@ -2,7 +2,8 @@
 using JLD2, StatFiles, DataFrames, NonlinearSolve, LinearAlgebra, ForwardDiff, Plots
 
 include("Globals.jl");
-include("ProdFunc.jl");
+include("Estimation_Funcs.jl");
+include("AggSupply_Functions.jl");
 include("Solve_Baseline_Functions.jl");
 include("Solve_Counterfactual_Functions.jl");
 

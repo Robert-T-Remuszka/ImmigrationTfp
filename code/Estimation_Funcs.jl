@@ -1,8 +1,8 @@
 # estimation of (νᵈ, νᶠ) directly from ACS migration-flow
 # data. EstimateScaleBetaAcs.do runs it and saves NuBetaEstimatesAcs.dta. This file's job is packaging
-# that Stata output for Julia consumption, mirroring how Solve_Baseline_Functions.jl's
-# load_prodfunc_estimate() packages ProdFunc_Estimate.jl's output -- it does not
-# re-run any estimation itself.
+# that Stata/Julia estimation output for Solve_Baseline_Functions.jl's Parameters() to consume
+# (load_cp_estimate, load_theta_delta, load_aggsupply_estimate, load_scale_estimate below) --
+# it does not re-run any estimation itself.
 #
 # MakeIRF.do estimates Indirect inference targets and saves the Iv1990 baseline (not the
 # Iv1990_LOO robustness check) to IRFEstimates.dta; load_irf_estimates() below

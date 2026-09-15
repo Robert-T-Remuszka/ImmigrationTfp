@@ -3,17 +3,29 @@
 ================================================================#
 """
 Parameters governing the baseline (factual, no-quota) sequential equilibrium.
-Production parameters (ρ, θ, γ, μ) are the ones estimated in ProdFunc_Estimate.jl
+Production parameters (ρ, μ_z, ξ_ω, ξ_z) are the log-normal task-assignment
+parameterization (Assumption A4): (μ_z, ξ_ω, ξ_z) come from EstimateCp.do's
+producer choice-probability probit, ρ from AggSupply_Estimate.jl's factor-share
+NLS -- see AggSupply_Functions.jl, which supplies the task-integral math
+(TaskAggregates_LN, LaborAggregate) this struct's `TaskAggregates` wraps.
+
+θ, δ are state-indexed (capital share and depreciation rate), backed out of the
+capital FOC (3.9) using El-Shagi-Yamarik's depreciation series -- see
+CalibrateTheta.do. They share Lᵈ₀/Lᶠ₀/Y₀'s row order/convention (Init_Data's
+FIPS-ordered rows, "Rest of World" last); the Rest-of-World entry is NaN and
+never used, since it has no domestic capital block (see solve_initial_wages,
+whose loop only runs over l = 1:N-1).
 """
 struct Parameters{T1 <: Real, T2 <: Integer}
 
     β::T1                                       # HH discount rate
     r::T1                                       # Capital rental rate
-    δ::T1                                       # Capital depreciation rate
+    δ::Vector{T1}                                # Capital depreciation rate by location (El-Shagi-Yamarik; NaN for Rest-of-World)
     ρ::T1                                       # CES parameter between foreign/domestic task aggregates
-    θ::T1                                       # Capital share
-    γ::T1                                       # Comparative-advantage schedule z(τ) = τ^γ
-    μ::T1                                       # Pareto minimum of the variety distribution G(ω)
+    θ::Vector{T1}                                # Capital share by location, (r+δ_l)·K/Y, from the capital FOC (NaN for Rest-of-World)
+    μ_z::T1                                     # Location of ln z(τ) = μ_z + ξ_z·Φ⁻¹(τ)
+    ξ_ω::T1                                     # SD of ln ω ~ N(0, ξ_ω²)  [μ_ω ≡ 0, Assumption A4]
+    ξ_z::T1                                     # SD of the comparative-advantage schedule ln z(τ)
     ψ::T1                                       # AR(1) coefficient for the US-specific mobility cost mₜ
     νᵈ::T1                                      # Gumbel scale - domestic
     νᶠ::T1                                      # Gumbel scale - foreign
@@ -60,12 +72,6 @@ from PiMat.dta. Rows and the pi_{F,D}_* columns are both ordered by FIPS code, w
 load_init_data() = DataFrame(load(joinpath(data, "PiMat.dta")))
 
 """
-Load the current production-function estimate (ρ, θ, γ, μ) from ProductionFunction.jld2,
-as fit by ProdFunc_Estimate.jl
-"""
-load_prodfunc_estimate() = load(joinpath(@__DIR__, "ProductionFunction.jld2"), "p_star")
-
-"""
 Load real 1996 state GDP (millions of dollars) from StateAnalysisPreTfp.dta, in the same
 row order as Init_Data (matched on FIPS code — Init_Data's Origin column). The Rest-of-World
 row has no GDP counterpart and is filled with NaN; it is never used (see solve_initial_wages).
@@ -77,21 +83,51 @@ function load_gdp_1996(Init_Data::DataFrame)
     return [get(gdp_by_fips, o, NaN) for o in Init_Data.Origin]
 end
 
+"""
+Match CalibrateTheta.do's state-level (θ_l, δ_l) from ThetaDelta.dta into
+Init_Data's row order (matched on FIPS code — Init_Data's Origin column), the
+same convention load_gdp_1996 uses. ThetaDelta.dta has no Rest-of-World row
+(θ_l, δ_l are domestic capital-FOC objects); that row is filled with NaN and
+never used (see solve_initial_wages).
+"""
+function match_theta_delta(Init_Data::DataFrame, θδ::DataFrame)
+    θ_by_fips = Dict(θδ.statefip .=> Float64.(θδ.theta_l))
+    δ_by_fips = Dict(θδ.statefip .=> Float64.(θδ.delta_l))
+    θ = [get(θ_by_fips, o, NaN) for o in Init_Data.Origin]
+    δ = [get(δ_by_fips, o, NaN) for o in Init_Data.Origin]
+    return θ, δ
+end
+
 #================================================================
                         CONSTRUCTOR FUNCTIONS
 ================================================================#
+"""
+Construct Parameters, defaulting every estimated/calibrated field to the
+current saved output of its estimating equation:
+    ρ, μ_z, ξ_ω, ξ_z  <- AggSupply_Estimate.jl's AggSupply.jld2 (load_aggsupply_estimate)
+    νᵈ, νᶠ            <- EstimateScaleBetaAcs.do's NuBetaEstimatesAcs.dta (load_scale_estimate)
+    θ, δ              <- CalibrateTheta.do's state-level θ_l, δ_l (load_theta_delta),
+                         matched into Init_Data's row order by match_theta_delta.
+Requires Estimation_Funcs.jl and AggSupply_Functions.jl to already be included
+(for the load_* functions and TaskAggregates_LN respectively).
+"""
 function Parameters(;
     β::T          = 0.96,
     r::T          = 1 / β - 1,
-    δ::T          = 0.10,
-    prodfunc::NamedTuple = load_prodfunc_estimate(),
-    ρ::T          = prodfunc.ρ,
-    θ::T          = prodfunc.θ,
-    γ::T          = prodfunc.γ,
-    μ::T          = prodfunc.μ,
+    aggsupply::NamedTuple = load_aggsupply_estimate(),
+    scale::NamedTuple     = load_scale_estimate(),
+    θδ::DataFrame         = load_theta_delta(),
+    # Float64(...) wrapping is required, not cosmetic: (μ_z,ξ_ω,ξ_z) ultimately
+    # trace back to Stata's plain `gen` (Float32) in EstimateCp.do, while ρ comes
+    # from Optim (Float64) -- without this, T's unification across defaults picks
+    # up Float32 and silently narrows everything else built from these kwargs.
+    ρ::T          = Float64(aggsupply.ρ),
+    μ_z::T        = Float64(aggsupply.μ_z),
+    ξ_ω::T        = Float64(aggsupply.ξ_ω),
+    ξ_z::T        = Float64(aggsupply.ξ_z),
     ψ::T          = 0.50,
-    νᵈ::T         = 4.5,
-    νᶠ::T         = 4.5,
+    νᵈ::T         = Float64(scale.νᵈ),
+    νᶠ::T         = Float64(scale.νᶠ),
     wᵈ_row::T     = 60077 / 0.77, # IRS Statistics of Income, US citizens abroad, 1996, deflated to 2009 USD
     wᶠ_row::T     = 4085  / 0.77, # World Bank GNI per capita, 1996, deflated to 2009 USD
     Init_Data::DataFrame = load_init_data()
@@ -107,8 +143,10 @@ function Parameters(;
     Lᵈ₀ = Vector{T}(Init_Data[:, :Domestic_1996] ./ 1e+6)
     Lᶠ₀ = Vector{T}(Init_Data[:, :Foreign_1996]  ./ 1e+6)
     Y₀  = Vector{T}(load_gdp_1996(Init_Data))
+    θ_raw, δ_raw = match_theta_delta(Init_Data, θδ)
+    θ, δ = Vector{T}(θ_raw), Vector{T}(δ_raw)
 
-    return Parameters(β, r, δ, ρ, θ, γ, μ, ψ, νᵈ, νᶠ, N, wᵈ_row, wᶠ_row, Πᵈ₋, Πᶠ₋, Lᵈ₀, Lᶠ₀, Y₀)
+    return Parameters(β, r, δ, ρ, θ, μ_z, ξ_ω, ξ_z, ψ, νᵈ, νᶠ, N, wᵈ_row, wᶠ_row, Πᵈ₋, Πᶠ₋, Lᵈ₀, Lᶠ₀, Y₀)
 
 end
 
@@ -116,10 +154,11 @@ end
                     TEMPORARY EQUILIBRIUM 
 ================================================================#
 """
-Task productivity Z and foreign-born task share λ implied by the relative wage w = wᴰ/wᶠ. 
-Wrapper around ProdFunc.jl's TaskAggregates_μ.
+Task productivity Z and foreign-born task share λ implied by the relative wage w = wᴰ/wᶠ.
+Wrapper around AggSupply_Functions.jl's TaskAggregates_LN (log-normal task-assignment
+parameterization, Assumption A4).
 """
-TaskAggregates(w; p::Parameters) = TaskAggregates_μ(p.ρ, p.γ, p.μ, w)
+TaskAggregates(w; p::Parameters) = TaskAggregates_LN(p.ρ, p.μ_z, p.ξ_ω, p.ξ_z, w)
 
 """
 Residual of the relative-wage / task-allocation condition:
@@ -218,10 +257,12 @@ ResourceFeasResidualData(wᵈ, wᶠ, Y, lᵈ, lᶠ; θ) = (1 - θ) * Y / (wᵈ *
 """
 Bundles the relative-wage condition (3.7) and the data-anchored resource-feasibility residual
 into a 2-vector, given u = [log(wᴰ/wᶠ), log(wᶠ)]. Used only at t = 0 — see solve_initial_wages.
+θ is passed explicitly (rather than destructured from p) since it is now location-indexed;
+the caller passes p.θ[l] for the location currently being solved.
 """
-function InitialWageResidual(u, lᵈ, lᶠ, Y; p::Parameters)
+function InitialWageResidual(u, lᵈ, lᶠ, Y, θ; p::Parameters)
 
-    (; ρ, θ) = p
+    (; ρ) = p
     w, wᶠ = exp(u[1]), exp(u[2])
     wᵈ    = w * wᶠ
 
@@ -241,14 +282,14 @@ fully model-implied
 """
 function solve_initial_wages(p::Parameters)
 
-    (; N, Y₀, Lᵈ₀, Lᶠ₀, wᵈ_row, wᶠ_row) = p
+    (; N, Y₀, Lᵈ₀, Lᶠ₀, θ, wᵈ_row, wᶠ_row) = p
     Wᵈ₀, Wᶠ₀ = zeros(N), zeros(N)
     Wᵈ₀[N], Wᶠ₀[N] = wᵈ_row, wᶠ_row
 
     for l in 1:N - 1
 
         u0 = [0.0, 0.0]
-        f(u, _) = InitialWageResidual(u, Lᵈ₀[l], Lᶠ₀[l], Y₀[l]; p)
+        f(u, _) = InitialWageResidual(u, Lᵈ₀[l], Lᶠ₀[l], Y₀[l], θ[l]; p)
         sol = solve(NonlinearProblem(f, u0, nothing), NewtonRaphson(); maxiters = Int(1e6), abstol = 1e-6, reltol = 1e-6)
         sol.retcode == ReturnCode.Success || error("Initial wage bootstrap failed at location $l (retcode=$(sol.retcode))")
         Wᵈ₀[l] = exp(sol.u[1]) * exp(sol.u[2])
@@ -507,16 +548,17 @@ end
 ================================================================#
 """
 Recover the converged CES task-labor aggregate L(l, t) implied by a solved Soln — the
-foreign/domestic task shares λ come from the same TaskAggregates_μ call ComputeZ uses.
+foreign/domestic task shares λ come from the same TaskAggregates_LN call ComputeZ uses.
 """
 function ComputeL(S::Soln; p::Parameters)
 
-    λ = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :λ)
-    return LaborAggregate.(λ, p.ρ, S.Lᶠ, S.Lᵈ)
+    ta = TaskAggregates_LN.(p.ρ, p.μ_z, p.ξ_ω, p.ξ_z, S.Wᵈ ./ S.Wᶠ)
+    λ, oneMinusλ = getproperty.(ta, :λ), getproperty.(ta, :oneMinusλ)
+    return LaborAggregate.(λ, p.ρ, S.Lᶠ, S.Lᵈ, oneMinusλ)
 
 end
 
 """
 Recover the converged task-productivity series Z(l, t) implied by a solved Soln.
 """
-ComputeZ(S::Soln; p::Parameters) = getproperty.(TaskAggregates_μ.(p.ρ, p.γ, p.μ, S.Wᵈ ./ S.Wᶠ), :Z)
+ComputeZ(S::Soln; p::Parameters) = getproperty.(TaskAggregates_LN.(p.ρ, p.μ_z, p.ξ_ω, p.ξ_z, S.Wᵈ ./ S.Wᶠ), :Z)

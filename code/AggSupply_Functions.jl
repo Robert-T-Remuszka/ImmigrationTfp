@@ -122,102 +122,13 @@ the old Pareto tail-existence condition (b<1, i.e. ρ<0.5) is GONE -- only
 """
 valid_params(ρ, ξ_ω, ξ_z) = (ρ < 1) && !isapprox(ρ, 0) && (ξ_ω > 0) && (ξ_z > 0)
 
-#================================================================
-                        PARAMETERS STRUCT
-================================================================#
-"""
-New, self-contained parameters struct for the log-normal aggregate-supply and
-migration blocks. This is DELIBERATELY SEPARATE from Solve_Baseline_Functions.jl's
-existing `Parameters` struct (still the old Pareto parameterization) -- per
-2026-09-13 scope decision, this refactor only builds AggSupply_Functions.jl and
-AggSupply_Estimate.jl as new, self-contained files; wiring this struct into the
-baseline/counterfactual solvers (replacing the old `Parameters`, editing its ~8
-call sites in Solve_Baseline_Functions.jl) is a separate, later step, at which
-point the old ProdFunc.jl/ProdFunc_Estimate.jl also get retired.
-
-Unlike Solve_Baseline_Functions.jl's `Parameters`, this struct holds only
-STRUCTURAL PARAMETERS -- no geography/initial-condition data (N, wᵈ_row,
-wᶠ_row, Πᵈ₋, Πᶠ₋, Lᵈ₀, Lᶠ₀, Y₀), since those aren't outputs of any estimating
-equation and belong to the (untouched, for now) baseline-solve machinery.
-
-θ, δ are state-indexed vectors (paired with `statefip`), not scalars: θ_l is
-backed out state-by-state from the capital FOC (3.9) using El-Shagi-Yamarik's
-depreciation series, not estimated -- see CalibrateTheta.do.
-
-ψ, κ, σₘ (the mₜ AR(1) process mₜ₊₁=κ+ψ(mₜ-κ)+σₘeₜ) are PLACEHOLDERS pending
-indirect inference against the section-4 LPIV IRFs (see Estimation_Funcs.jl's
-load_irf_estimates()). κ=0 since the dynamic hat algebra differences it out
-until the counterfactual.
-"""
-struct Parameters{T1 <: Real}
-
-    β::T1                      # HH discount rate
-    r::T1                      # Capital rental rate, 1/β - 1
-
-    ρ::T1                      # CES parameter between foreign/domestic task aggregates
-    μ_z::T1                    # Location of ln z(τ) = μ_z + ξ_z·Φ⁻¹(τ)
-    ξ_ω::T1                    # SD of ln ω ~ N(0, ξ_ω²)   [μ_ω ≡ 0, Assumption A4]
-    ξ_z::T1                    # SD of the comparative-advantage schedule ln z(τ)
-
-    θ::Vector{T1}              # Capital share by state, (r+δ_l)·K/Y, from the capital FOC
-    δ::Vector{T1}              # Capital depreciation rate by state (El-Shagi-Yamarik)
-    statefip::Vector{String}   # State FIPS codes indexing θ, δ
-
-    νᵈ::T1                     # Gumbel scale - domestic
-    νᶠ::T1                     # Gumbel scale - foreign
-
-    ψ::T1                      # PLACEHOLDER: AR(1) persistence of the mobility cost mₜ
-    κ::T1                      # PLACEHOLDER: AR(1) long-run mean of mₜ (=0 until counterfactual)
-    σₘ::T1                     # PLACEHOLDER: AR(1) innovation SD of mₜ
-
-end
-
-"""
-Construct Parameters, defaulting every estimated/calibrated field to the
-current saved output of its estimating equation:
-    ρ, μ_z, ξ_ω, ξ_z  <- AggSupply_Estimate.jl's AggSupply.jld2 (load_aggsupply_estimate)
-    θ, δ, statefip    <- CalibrateTheta.do's ThetaDelta.dta      (load_theta_delta)
-    νᵈ, νᶠ            <- EstimateScaleBetaAcs.do's NuBetaEstimatesAcs.dta (load_scale_estimate)
-β, r are calibrated (not estimated); ψ, κ, σₘ are placeholders (see struct docstring).
-
-Requires Estimation_Funcs.jl to already be included (for the load_* functions) --
-matches the existing convention where functions files assume their dependencies
-are loaded by the calling script, not by each other.
-"""
-function Parameters(;
-    β::Real                  = 0.96,
-    r::Real                  = 1 / β - 1,
-    aggsupply::NamedTuple    = load_aggsupply_estimate(),
-    scale::NamedTuple        = load_scale_estimate(),
-    θδ::DataFrame            = load_theta_delta(),
-    ρ::Real                  = aggsupply.ρ,
-    μ_z::Real                = aggsupply.μ_z,
-    ξ_ω::Real                = aggsupply.ξ_ω,
-    ξ_z::Real                = aggsupply.ξ_z,
-    νᵈ::Real                 = scale.νᵈ,
-    νᶠ::Real                 = scale.νᶠ,
-    ψ::Real                  = 0.50,
-    κ::Real                  = 0.00,
-    σₘ::Real                 = 1.00,
-    )
-
-    # Stata's plain `gen` (used in EstimateCp.do/EstimateScaleBetaAcs.do) stores
-    # Float32, not Float64 -- promote everything to a single common type here
-    # rather than relying on Julia to unify mixed Float32/Float64 inputs under
-    # one type parameter, which it won't do automatically.
-    T = Float64
-    statefip = String.(θδ.statefip)
-    θ = Vector{T}(θδ.theta_l)
-    δ = Vector{T}(θδ.delta_l)
-
-    return Parameters(T(β), T(r), T(ρ), T(μ_z), T(ξ_ω), T(ξ_z), θ, δ, statefip,
-                       T(νᵈ), T(νᶠ), T(ψ), T(κ), T(σₘ))
-
-end
-
-"""
-Wrapper mirroring the old Solve_Baseline_Functions.jl call convention
-(`TaskAggregates(w; p::Parameters)`), so wiring this struct into the solvers
-later is a one-line change at each call site.
-"""
-TaskAggregates(w; p::Parameters) = TaskAggregates_LN(p.ρ, p.μ_z, p.ξ_ω, p.ξ_z, w)
+# NOTE (2026-09-14): this file used to also define a self-contained `Parameters`
+# struct/constructor here, kept deliberately separate from Solve_Baseline_Functions.jl's
+# struct while the baseline/counterfactual solvers still ran on the old Pareto
+# parameterization. That wiring step has now happened: Solve_Baseline_Functions.jl's
+# `Parameters` struct itself was switched over to (ρ, μ_z, ξ_ω, ξ_z), so a second
+# `Parameters` type here would collide (same name, different fields) whenever both
+# files are included together. This file now only provides the math library
+# (task_args, log_task_integrals, TaskAggregates_LN, LaborAggregate, valid_params)
+# consumed by both AggSupply_Estimate.jl (with bare scalars) and
+# Solve_Baseline_Functions.jl (via its own `Parameters`/`TaskAggregates` wrapper).
