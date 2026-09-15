@@ -250,7 +250,7 @@ of the theoretical (θ/(r+δ))^{θ/(1-θ)}ZL construct in ResourceFeasResidual.
 
 I use actual 1996 state GDP (Y₀, from StateAnalysisPreTfp.dta) at t = 0
 only. This makes wᵈ_row, wᶠ_row (real dollars, from IRS SOI / World Bank) directly comparable
-to the model's endogenous state wages without any separate calibration step.
+to the model's endogenous wages without any separate calibration step.
 """
 ResourceFeasResidualData(wᵈ, wᶠ, Y, lᵈ, lᶠ; θ) = (1 - θ) * Y / (wᵈ * lᵈ + wᶠ * lᶠ) - 1
 
@@ -275,10 +275,7 @@ end
 
 """
 Backout init wages at t = 0 (1996) from actual state GDP (Y₀) and labor stocks
-(Lᵈ₀, Lᶠ₀), via (3.7) + the data-anchored resource-feasibility residual above. The Rest-of-World
-wage is exogenous and just carried over unchanged. This is the only place actual GDP data enters
-the model; from t ≥ 1 the (forthcoming) proportional-change recursion takes over so that wage changes are
-fully model-implied
+(Lᵈ₀, Lᶠ₀). The Rest-of-World wage is exogenous and just carried over unchanged
 """
 function solve_initial_wages(p::Parameters)
 
@@ -306,7 +303,7 @@ end
 ================================================================#
 """
 N×N matrix of period-t mobility-cost multipliers. The US-specific mobility cost mₜ only
-enters the migration problem (3.1) for moves from "Rest of World" (row N) into a US location
+enters the migration problem from "Rest of World" (row N) into a US location
 (columns 1:N-1); all other bilateral costs are unaffected.
 """
 function cost_matrix(Ṁ_t, N)
