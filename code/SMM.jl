@@ -1,5 +1,5 @@
 # %% Setup
-using JLD2, StatFiles, DataFrames, NonlinearSolve, LinearAlgebra, ForwardDiff, Plots
+using JLD2, StatFiles, DataFrames, NonlinearSolve, LinearAlgebra, ForwardDiff, Plots, Random, Statistics
 
 include("Globals.jl")
 include("Estimation_Funcs.jl")
@@ -34,13 +34,36 @@ us = 1:ss.p_ss.N - 1
 weights = ss.Baseline_ss.Lᵈ[us, 1] .+ ss.Baseline_ss.Lᶠ[us, 1]
 aggregate(κ_x) = vec(sum(κ_x .* weights, dims = 1) ./ sum(weights))
 
-panels = map((:Z, :L, :Wᵈ, :Wᶠ)) do outcome
+panels = map((:Lᵈ, :Lᶠ, :Wᵈ, :Wᶠ, :Z, :L)) do outcome
     pl = plot(title = String(outcome), xlabel = "Horizon k", ylabel = "Kernel(k)", legend = :outertopright, grid = false)
     for σ_p in sort(collect(keys(kernels)))
         plot!(pl, 0:size(kernels[σ_p][outcome], 2) - 1, aggregate(kernels[σ_p][outcome]), label = "σ_p=$σ_p", linewidth = 1.5)
     end
     pl
 end
-scalability_plot = plot(panels..., layout = (2, 2), size = (1200, 800))
+scalability_plot = plot(panels..., layout = (3, 2), size = (1200, 1200))
 savefig(scalability_plot, joinpath(graphs, "KernelScalability.pdf"))
 scalability_plot
+
+# %% Build the σ_p=0.01 kernel (the chosen probe, per the scalability check above) and smoke-test
+# the BKM convolution: draw a shared national innovation sequence once, then simulate a panel at
+# a placeholder σ (the actual grid search over (σ,ψ) is the next step, not this one).
+κ, _ = bkm_kernel(ss.Baseline_ss; p = ss.p_ss, σ_p = 0.01, K = 60)
+
+Tsim = 30
+e    = draw_innovations(Tsim; seed = 1)
+σ_placeholder = 0.05
+panel = simulate_panel(κ, e; σ = σ_placeholder)
+
+println("Simulated panel shapes: ", NamedTuple(k => size(v) for (k, v) in pairs(panel)))
+println("L: std across (state,time) = ", round(std(panel.L), digits = 4),
+        "  range = ", round.(extrema(panel.L), digits = 4))
+
+# %% Plot: simulated L path for a handful of states, to eyeball that the convolution produces
+# sensible-looking dynamics (persistent, decaying responses to the shared shock, not white noise).
+sim_plot = plot(title = "Simulated log L deviation (σ=$σ_placeholder)", xlabel = "Simulated period",
+                ylabel = "log L̂", legend = :outertopright, grid = false)
+for l in 1:5:size(panel.L, 1)
+    plot!(sim_plot, 1:Tsim, panel.L[l, :], label = "state $l", linewidth = 1.5)
+end
+sim_plot

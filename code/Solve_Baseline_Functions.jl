@@ -316,6 +316,10 @@ end
 Update choice probabilities. Vectorized over (l, l') for each t: the
 numerator matrix is the lagged probability times the forward value change and cost-change
 terms, elementwise; rows are then normalized to sum to one.
+
+The mobility-cost shock mₜ applies only to foreign-born migration decisions (n=F), not
+domestic-born ones -- a domestic-born worker returning from "Rest of World" to the US faces
+no ς_{ll'}mₜ term. Cᵈ is therefore always the no-shock matrix regardless of Ṁ.
 """
 function UpdateChoiceProbabilities(S::Soln, Ṁ::Vector; p::Parameters)
 
@@ -323,15 +327,16 @@ function UpdateChoiceProbabilities(S::Soln, Ṁ::Vector; p::Parameters)
     (; U̇ᵈ, U̇ᶠ, Πᵈ, Πᶠ, T) = S
 
     Πᵈ_new, Πᶠ_new = copy(Πᵈ), copy(Πᶠ)
+    Cᵈ = cost_matrix(1.0, N)
 
     for t in 1:T - 1
 
         Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
         Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(Ṁ[t], N)
+        Cᶠ     = cost_matrix(Ṁ[t], N)
 
-        Numᵈ = Πᵈ_lag .* (U̇ᵈ[:, t + 1] .^ (β / νᵈ))' .* C .^ (-1 / νᵈ)
-        Numᶠ = Πᶠ_lag .* (U̇ᶠ[:, t + 1] .^ (β / νᶠ))' .* C .^ (-1 / νᶠ)
+        Numᵈ = Πᵈ_lag .* (U̇ᵈ[:, t + 1] .^ (β / νᵈ))' .* Cᵈ .^ (-1 / νᵈ)
+        Numᶠ = Πᶠ_lag .* (U̇ᶠ[:, t + 1] .^ (β / νᶠ))' .* Cᶠ .^ (-1 / νᶠ)
 
         Πᵈ_new[:, :, t] = Numᵈ ./ sum(Numᵈ, dims = 2)
         Πᶠ_new[:, :, t] = Numᶠ ./ sum(Numᶠ, dims = 2)
@@ -367,6 +372,9 @@ Update value changes, by backward recursion from the boundary condition
 U̇[:, T] = 1. Vectorized over l for each t: the inner sum over destinations l' is a
 matrix-vector product of the (elementwise) lagged-probability/cost-change matrix against the
 forward value changes.
+
+As in UpdateChoiceProbabilities, the mobility-cost shock enters only the foreign-born (n=F)
+value-change recursion; Cᵈ is always the no-shock matrix.
 """
 function UpdateValueChanges(S::Soln, Ṁ::Vector; p::Parameters)
 
@@ -374,15 +382,16 @@ function UpdateValueChanges(S::Soln, Ṁ::Vector; p::Parameters)
     (; Πᵈ, Πᶠ, Wᵈ, Wᶠ, T) = S
 
     U̇ᵈ_new, U̇ᶠ_new = ones(N, T), ones(N, T)
+    Cᵈ = cost_matrix(1.0, N)
 
     for t in T - 1:-1:1
 
         Πᵈ_lag = t == 1 ? Πᵈ₋ : Πᵈ[:, :, t - 1]
         Πᶠ_lag = t == 1 ? Πᶠ₋ : Πᶠ[:, :, t - 1]
-        C      = cost_matrix(Ṁ[t], N)
+        Cᶠ     = cost_matrix(Ṁ[t], N)
 
-        innerᵈ = (Πᵈ_lag .* C .^ (-1 / νᵈ)) * (U̇ᵈ_new[:, t + 1] .^ (β / νᵈ))
-        innerᶠ = (Πᶠ_lag .* C .^ (-1 / νᶠ)) * (U̇ᶠ_new[:, t + 1] .^ (β / νᶠ))
+        innerᵈ = (Πᵈ_lag .* Cᵈ .^ (-1 / νᵈ)) * (U̇ᵈ_new[:, t + 1] .^ (β / νᵈ))
+        innerᶠ = (Πᶠ_lag .* Cᶠ .^ (-1 / νᶠ)) * (U̇ᶠ_new[:, t + 1] .^ (β / νᶠ))
 
         ẇᵈ = t == 1 ? ones(N) : Wᵈ[:, t] ./ Wᵈ[:, t - 1]
         ẇᶠ = t == 1 ? ones(N) : Wᶠ[:, t] ./ Wᶠ[:, t - 1]

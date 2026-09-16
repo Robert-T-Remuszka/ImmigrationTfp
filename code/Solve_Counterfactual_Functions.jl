@@ -19,6 +19,9 @@ Update the counterfactual choice probabilities π̃, given the just-updated hat 
 UpdateChoiceProbabilities's vectorized structure, with the baseline's dot probability change
 (Πᵈ_dot) and the counterfactual's own lagged probability (Π̃ᵈ_lag) both entering multiplicatively,
 matching the paper's π̃ⁿ equation exactly.
+
+M̂ enters only the foreign-born (n=F) block -- Cᵈ is always the no-shock matrix, since the
+mobility-cost shock does not apply to domestic-born migration decisions.
 """
 function UpdateProbabilitiesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
 
@@ -28,6 +31,7 @@ function UpdateProbabilitiesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parame
 
     Ûᵈ, Ûᶠ = CF.U̇ᵈ ./ U̇ᵈ, CF.U̇ᶠ ./ U̇ᶠ
     Π̃ᵈ_new, Π̃ᶠ_new = copy(Π̃ᵈ), copy(Π̃ᶠ)
+    Cᵈ = cost_matrix(1.0, N)
 
     for t in 1:T - 1
 
@@ -38,10 +42,10 @@ function UpdateProbabilitiesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parame
 
         Πᵈ_dot = Πᵈ[:, :, t] ./ Πᵈ_lag
         Πᶠ_dot = Πᶠ[:, :, t] ./ Πᶠ_lag
-        C      = cost_matrix(M̂[t], N)
+        Cᶠ     = cost_matrix(M̂[t], N)
 
-        Numᵈ = Πᵈ_dot .* Π̃ᵈ_lag .* (Ûᵈ[:, t + 1] .^ (β / νᵈ))' .* C .^ (-1 / νᵈ)
-        Numᶠ = Πᶠ_dot .* Π̃ᶠ_lag .* (Ûᶠ[:, t + 1] .^ (β / νᶠ))' .* C .^ (-1 / νᶠ)
+        Numᵈ = Πᵈ_dot .* Π̃ᵈ_lag .* (Ûᵈ[:, t + 1] .^ (β / νᵈ))' .* Cᵈ .^ (-1 / νᵈ)
+        Numᶠ = Πᶠ_dot .* Π̃ᶠ_lag .* (Ûᶠ[:, t + 1] .^ (β / νᶠ))' .* Cᶠ .^ (-1 / νᶠ)
 
         Π̃ᵈ_new[:, :, t] = Numᵈ ./ sum(Numᵈ, dims = 2)
         Π̃ᶠ_new[:, :, t] = Numᶠ ./ sum(Numᶠ, dims = 2)
@@ -57,6 +61,8 @@ Update the counterfactual value changes, by backward recursion, given the just-u
 counterfactual probabilities and the fixed Baseline. Returns a Soln whose U̇ᵈ, U̇ᶠ hold
 the counterfactual's *actual* value changes (Ũ̇ = Û·U̇), not the hats themselves — Û is always
 recovered on demand as CF.U̇/Baseline.U̇, matching UpdateProbabilitiesHat's convention.
+
+M̂ enters only the foreign-born (n=F) block, as in UpdateProbabilitiesHat.
 """
 function UpdateChangesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
 
@@ -65,6 +71,7 @@ function UpdateChangesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
     Π̃ᵈ, Π̃ᶠ, W̃ᵈ, W̃ᶠ = CF.Πᵈ, CF.Πᶠ, CF.Wᵈ, CF.Wᶠ
 
     Ûᵈ_new, Ûᶠ_new = ones(N, T), ones(N, T)
+    Cᵈ = cost_matrix(1.0, N)
 
     for t in T - 1:-1:1
 
@@ -75,10 +82,10 @@ function UpdateChangesHat(CF::Soln, Baseline::Soln, M̂::Vector; p::Parameters)
 
         Πᵈ_dot = Πᵈ[:, :, t] ./ Πᵈ_lag
         Πᶠ_dot = Πᶠ[:, :, t] ./ Πᶠ_lag
-        C      = cost_matrix(M̂[t], N)
+        Cᶠ     = cost_matrix(M̂[t], N)
 
-        innerᵈ = (Πᵈ_dot .* Π̃ᵈ_lag .* C .^ (-1 / νᵈ)) * (Ûᵈ_new[:, t + 1] .^ (β / νᵈ))
-        innerᶠ = (Πᶠ_dot .* Π̃ᶠ_lag .* C .^ (-1 / νᶠ)) * (Ûᶠ_new[:, t + 1] .^ (β / νᶠ))
+        innerᵈ = (Πᵈ_dot .* Π̃ᵈ_lag .* Cᵈ .^ (-1 / νᵈ)) * (Ûᵈ_new[:, t + 1] .^ (β / νᵈ))
+        innerᶠ = (Πᶠ_dot .* Π̃ᶠ_lag .* Cᶠ .^ (-1 / νᶠ)) * (Ûᶠ_new[:, t + 1] .^ (β / νᶠ))
 
         ẇᵈ  = t == 1 ? ones(N) : Wᵈ[:, t] ./ Wᵈ[:, t - 1]
         ẇ̃ᵈ = t == 1 ? ones(N) : W̃ᵈ[:, t] ./ W̃ᵈ[:, t - 1]

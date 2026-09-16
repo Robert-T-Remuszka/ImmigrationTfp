@@ -94,7 +94,7 @@ guess is far cheaper than extending the original transition indefinitely.
 """
 function SolveSteadyState(p::Parameters;
     T0::Integer = 25, T_step::Integer = 50, level_tol::Real = 1e-4, max_T::Integer = 1500,
-    T_ss::Integer = 120, refine_maxiter::Integer = 10,
+    T_ss::Integer = 400, refine_maxiter::Integer = 10,
     outer_tol::Real = 1e-6, outer_maxiter::Integer = 20_000, ss_tol::Real = 1e-6,
     verbose::Bool = true)
 
@@ -136,6 +136,13 @@ against the (already re-anchored, flat) steady-state Baseline, then normalize by
 the "response per unit shock" 𝒦(k) = ln(x^CF/x^Baseline)[k] / σ_p for k = 0,…,K-1 (k=0 is the
 first period the shock bites, Soln column 2), for the 51 US locations (excludes Rest-of-World).
 
+Returns kernels for the PRIMITIVES (Lᵈ, Lᶠ, Wᵈ, Wᶠ) -- these are what simulate_panel should
+convolve against drawn innovations -- plus Z and L (the CES task-productivity/labor
+aggregates) computed by directly log-linearizing ComputeZ/ComputeL's output, kept only as a
+diagnostic against construct_aggregates's nonlinear reconstruction from the simulated
+primitives (see its docstring for why the two are not interchangeable for building a
+simulated panel).
+
 σ_p > 0 is a mobility-COST INCREASE (cost_matrix multiplies the ROW→US entries, and
 probabilities enter as C^(-1/ν)), so fewer ROW→US migrants -- confirmed against
 CounterfactualIRF.pdf. σ_p is a purely numerical probe size (a finite-difference step), not
@@ -156,10 +163,12 @@ function bkm_kernel(Baseline::Soln; p::Parameters, σ_p::Real, K::Integer,
     L_B, L_CF = ComputeL(Baseline; p), ComputeL(CF; p)
 
     κ = (
-        Z  = log.(Z_CF[us, 2:K + 1]  ./ Z_B[us, 2:K + 1])  ./ σ_p,
-        L  = log.(L_CF[us, 2:K + 1]  ./ L_B[us, 2:K + 1])  ./ σ_p,
+        Lᵈ = log.(CF.Lᵈ[us, 2:K + 1] ./ Baseline.Lᵈ[us, 2:K + 1]) ./ σ_p,
+        Lᶠ = log.(CF.Lᶠ[us, 2:K + 1] ./ Baseline.Lᶠ[us, 2:K + 1]) ./ σ_p,
         Wᵈ = log.(CF.Wᵈ[us, 2:K + 1] ./ Baseline.Wᵈ[us, 2:K + 1]) ./ σ_p,
         Wᶠ = log.(CF.Wᶠ[us, 2:K + 1] ./ Baseline.Wᶠ[us, 2:K + 1]) ./ σ_p,
+        Z  = log.(Z_CF[us, 2:K + 1]  ./ Z_B[us, 2:K + 1])  ./ σ_p,
+        L  = log.(L_CF[us, 2:K + 1]  ./ L_B[us, 2:K + 1])  ./ σ_p,
     )
 
     return κ, CF
@@ -188,7 +197,7 @@ function kernel_scalability(Baseline::Soln; p::Parameters, K::Integer,
     κ_ref = kernels[ref]
 
     rows = NamedTuple[]
-    for σ_p in probes, outcome in (:Z, :L, :Wᵈ, :Wᶠ)
+    for σ_p in probes, outcome in (:Lᵈ, :Lᶠ, :Wᵈ, :Wᶠ, :Z, :L)
 
         d   = maximum(abs.(kernels[σ_p][outcome] .- κ_ref[outcome]))
         rel = d / maximum(abs.(κ_ref[outcome]))
@@ -201,5 +210,85 @@ function kernel_scalability(Baseline::Soln; p::Parameters, K::Integer,
     end
 
     return kernels, DataFrame(rows)
+
+end
+
+#================================================================
+                        SIMULATION (BKM CONVOLUTION)
+================================================================#
+"""
+Draw a length-Tsim vector of i.i.d. standard-normal innovations eₜ -- one shared national
+draw per period, since mₜ is a single US-specific mobility cost, not state-specific; every
+state sees the same shock and differs only through its kernel's exposure. Matches the eₜ in
+the paper's law of motion mₜ₊₁=κ+ψ(mₜ-κ)+σeₜ. Draw once per grid search and reuse the same e
+across every (σ,ψ) point, so comparisons across the grid aren't contaminated by different
+random draws.
+"""
+draw_innovations(Tsim::Integer; seed::Integer = 1) = (Random.seed!(seed); randn(Tsim))
+
+"""
+Convolve a single outcome's kernel (L×K, per-unit-σ response from bkm_kernel) against a drawn
+innovation sequence e to build a simulated L×Tsim log-deviation panel, for structural
+innovation SD σ. Linear MA(∞) representation truncated at the kernel's horizon K:
+y[l,τ] = Σₛ κ[l,s+1]·σ·e[τ-s] for s=0,…,min(τ-1,K-1) -- κ(s) already encodes the full
+ψ-driven decay of a single shock's effect on mₜ (see mit_shock), so no further AR(1)
+rescaling happens here. This convolution is what replaces re-solving the nonlinear model
+per draw: κ depends on ψ and must be rebuilt (a fresh bkm_kernel call) if ψ changes, but for
+a fixed κ, rescaling by σ and convolving against e is cheap.
+"""
+function simulate_panel(κ::AbstractMatrix, e::AbstractVector; σ::Real)
+
+    L, K  = size(κ)
+    Tsim  = length(e)
+    y     = zeros(L, Tsim)
+
+    for τ in 1:Tsim, s in 0:min(τ - 1, K - 1)
+        y[:, τ] .+= κ[:, s + 1] .* σ .* e[τ - s]
+    end
+
+    return y
+
+end
+
+"""
+Simulate every outcome in a bkm_kernel NamedTuple (Z, L, Wᵈ, Wᶠ) against the same shared
+innovation draw e -- one national shock hits all outcomes/states simultaneously each period;
+only the exposure (κ) differs by outcome and state.
+"""
+simulate_panel(κ::NamedTuple, e::AbstractVector; σ::Real) =
+    NamedTuple(outcome => simulate_panel(getfield(κ, outcome), e; σ) for outcome in propertynames(κ))
+
+#================================================================
+                        AGGREGATE CONSTRUCTION FROM SIMULATED PRIMITIVES
+================================================================#
+"""
+Construct λ, Z, L on the simulated panel by applying TaskAggregates_LN/LaborAggregate to
+simulated LEVELS of the primitives (Lᵈ, Lᶠ, Wᵈ, Wᶠ) -- exactly what ComputeZ/ComputeL do to a
+solved Soln's fields -- rather than separately convolving log-linearized Z and L kernels. Z
+and L are nonlinear functions of the primitives; convolving two independently-linearized Z/L
+kernels would compound two different linearization errors on top of each other, instead of
+the one linearization actually licensed by BKM (linearizing the underlying wage/labor-stock
+dynamics), with the model's own exact nonlinear aggregator applied afterward -- which is also
+how λ, Z, L are constructed from real (not simulated) data: from levels, not from a log-linear
+combination of moments.
+
+`primitives` is a NamedTuple of simulated log-deviation panels (L×Tsim each, as returned by
+simulate_panel(κ, e; σ) for a κ containing at least Lᵈ, Lᶠ, Wᵈ, Wᶠ). `Baseline` is the flat,
+re-anchored steady state the kernel was built around: since it is flat, the level each log
+deviation is taken relative to is just Baseline's first column, for every simulated period.
+"""
+function construct_aggregates(primitives::NamedTuple, Baseline::Soln; p::Parameters)
+
+    us = 1:p.N - 1
+    Lᵈ_lvl = Baseline.Lᵈ[us, 1] .* exp.(primitives.Lᵈ)
+    Lᶠ_lvl = Baseline.Lᶠ[us, 1] .* exp.(primitives.Lᶠ)
+    Wᵈ_lvl = Baseline.Wᵈ[us, 1] .* exp.(primitives.Wᵈ)
+    Wᶠ_lvl = Baseline.Wᶠ[us, 1] .* exp.(primitives.Wᶠ)
+
+    ta = TaskAggregates_LN.(p.ρ, p.μ_z, p.ξ_ω, p.ξ_z, Wᵈ_lvl ./ Wᶠ_lvl)
+    λ, oneMinusλ, Z = getproperty.(ta, :λ), getproperty.(ta, :oneMinusλ), getproperty.(ta, :Z)
+    L = LaborAggregate.(λ, p.ρ, Lᶠ_lvl, Lᵈ_lvl, oneMinusλ)
+
+    return (; λ, Z, L, Lᵈ = Lᵈ_lvl, Lᶠ = Lᶠ_lvl, Wᵈ = Wᵈ_lvl, Wᶠ = Wᶠ_lvl)
 
 end
