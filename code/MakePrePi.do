@@ -163,6 +163,22 @@ frame drop UN_Stocks
 replace Supply_Domestic = `Domestic_ROW' if mi(Supply_Domestic)
 replace Supply_Foreign  = `GlobalPop`headyear'' - `Total_Labor_US' - `Domestic_ROW' if mi(Supply_Foreign)
 
+* Look up each DESTINATION's own stock -- needed below to scale the flow floor
+* by destination size, not just origin size. At this point Destination is
+* always a real US state (ROW only appears as an Origin so far; the
+* ROW-as-destination row added next is a residual, filled in later via
+* "if mi(pi_Foreign)", and is never floor-eligible).
+preserve
+    keep Origin Supply_Foreign Supply_Domestic
+    duplicates drop
+    ren Origin Destination
+    ren Supply_Foreign  Dest_Supply_Foreign
+    ren Supply_Domestic Dest_Supply_Domestic
+    tempfile DestStocks
+    save `DestStocks'
+restore
+merge m:1 Destination using `DestStocks', keep(1 3) nogen
+
 * Add ROW destination
 preserve
     keep Origin
@@ -175,26 +191,42 @@ append using `newobs'
 sort Origin Destination
 
 ********************** Calculate the Pi's *************************
-* Floor unobserved (zero) flows at half the smallest flow actually observed
-* anywhere in the sample, then convert to a probability. A fixed *probability*
-* floor (the previous approach: 1e-4) is mis-scaled for the "ROW" origin, whose
-* Supply_Foreign denominator (global population net of the US) is ~5.67
-* billion: a 1e-4 probability floor there implies an annual flow of ~567,000
-* people into any zero-observed-flow state -- an order of magnitude above the
-* largest *observed* ROW-origin flow (57,133), and it alone ends up driving
-* ~98% of the model's total ROW-to-US inflow. Flooring the flow instead keeps
-* every implied floor on the same small, economically sensible scale
-* regardless of the origin's stock size.
-qui summ Foreign  if Foreign  > 0
-loc flow_floor_F = r(min)
-qui summ Domestic if Domestic > 0
-loc flow_floor_D = r(min)
-loc flow_floor = min(`flow_floor_F', `flow_floor_D') / 2
+* Floor unobserved (zero) flows at half the smallest flow RATE actually
+* observed anywhere in the sample -- flow relative to the DESTINATION's own
+* stock, not the raw headcount -- then rescale that rate by each pair's own
+* destination stock before converting to a probability.
+*
+* A fixed *probability* floor (the original approach: 1e-4) is mis-scaled for
+* the "ROW" origin, whose Supply_Foreign denominator (global population net
+* of the US) is ~5.67 billion: it implied an annual flow of ~567,000 people
+* into any zero-observed-flow state -- an order of magnitude above the
+* largest *observed* ROW-origin flow (57,133), driving ~98% of the model's
+* total ROW-to-US inflow.
+*
+* Flooring the *flow* instead (a fixed headcount, the prior fix) self-scales
+* correctly with the ORIGIN's size, but is destination-size-invariant: the
+* same headcount was applied to every zero-observed-flow destination
+* regardless of that destination's own existing stock. 21 of 51 states have
+* zero observed ROW-origin flow and so all received the identical floor
+* headcount, which implied per-capita inflow rates spanning a ~60x range
+* purely as a function of destination size (e.g. a Wyoming-sized and a
+* Massachusetts-sized state, both with zero observed flow, ended up with
+* very different implied migration RATES). Flooring the rate and rescaling by
+* each pair's own destination stock keeps the floor sensible on both sides.
+gen rate_Foreign  = Foreign  / Dest_Supply_Foreign  if Foreign  > 0
+gen rate_Domestic = Domestic / Dest_Supply_Domestic if Domestic > 0
+qui summ rate_Foreign
+loc rate_floor_F = r(min)
+qui summ rate_Domestic
+loc rate_floor_D = r(min)
+loc rate_floor = min(`rate_floor_F', `rate_floor_D') / 2
+drop rate_Foreign rate_Domestic
 
 gen pi_Foreign  = Foreign  / Supply_Foreign
 gen pi_Domestic = Domestic / Supply_Domestic
-replace pi_Foreign  = `flow_floor' / Supply_Foreign  if Foreign  == 0
-replace pi_Domestic = `flow_floor' / Supply_Domestic if Domestic == 0
+replace pi_Foreign  = (`rate_floor' * Dest_Supply_Foreign)  / Supply_Foreign  if Foreign  == 0
+replace pi_Domestic = (`rate_floor' * Dest_Supply_Domestic) / Supply_Domestic if Domestic == 0
+drop Dest_Supply_Foreign Dest_Supply_Domestic
 
 * If observed outflow rates sum to > 0.99 for an origin, rescale proportionally
 * so the sum equals 0.99, leaving at least 0.01 probability for ROW and probabilities sum to one
