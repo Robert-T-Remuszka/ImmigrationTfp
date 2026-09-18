@@ -8,22 +8,6 @@ ratio-of-products :
 
     f_ll' = -(nu/2) * ln[(pi_ll'/pi_ll)*(pi_l'l/pi_l'l')]
 
-Derived directly from eq. 3.3: for l,l' both real US states the border
-indicator varsigma_ll' is zero, so pi_ll'/pi_ll = exp[(beta(V_l'-V_l) -
-f_ll')/nu] (the denominator of 3.3 is identical for both since it's the
-same origin l, so it cancels completely). Multiplying by the reverse-route
-ratio pi_l'l/pi_l'l' cancels the beta*V terms exactly (beta never appears
-in the final formula -- this is a cross-sectional, single-snapshot trick,
-unlike eq. 4.3's use of time leads to identify nu), leaving
-(pi_ll'/pi_ll)(pi_l'l/pi_l'l') = exp[-(f_ll'+f_l'l)/nu], and under symmetry
-f_ll'=f_l'l this solves to the formula above. This is a LOG, not the power
-formula an earlier pass of this file mistakenly used (ratio^(-nu/2) =
-exp(f_ll'), not f_ll' itself) -- caught and corrected 2026-09-18.
-
-Since pi_ll'/pi_ll = Flow_ll'/Flow_ll exactly (the origin's stock cancels
-identically top and bottom, regardless of how well-measured Supply_* is),
-this never needs the origin's true stock/ROW-residual to be well measured
--- see project_cp_inversion.md for the full write-up.
 
 Before doing that inversion, first need to pick WHICH YEAR (or window) of
 ACS choice probabilities to treat as the steady-state calibration
@@ -123,26 +107,15 @@ graph export "${Graphs}/AggMigrationRateByYear.pdf", replace as(pdf)
 di as text "Wrote ${Graphs}/CPStabilityByYear.pdf and ${Graphs}/AggMigrationRateByYear.pdf"
 
 /*================================================================
-(3) INVERT F_LL' (EQ. 3.3) FROM THE 2015 CHOICE PROBABILITIES
-
-f_ll' = -(nu/2) * ln[(pi_ll'/pi_ll)(pi_l'l/pi_l'l')], which equals exactly
--(nu/2) * ln[(Flow_ll'/Flow_ll)(Flow_l'l/Flow_l'l')] -- the origin's own
-stock cancels out of the ratio identically (see project_cp_inversion.md
-and the derivation above), so this works directly off flows and never
-touches Supply_* at all.
+(3) INVERT F_LL' FROM THE 2015 CHOICE PROBABILITIES
 ================================================================*/
 use "${Data}/AcsPiPanel.dta", clear
 keep if t == 2015
 keep Origin Destination Flow_Domestic Flow_Foreign
 
 * Floor zero flows at half the smallest nonzero flow observed (per
-* nativity) -- a zero cell would otherwise send the ratio to zero and
-* f_ll' to +infinity. At t=2015 this affects 553/2550 (22%) domestic and
-* 1597/2550 (63%) foreign off-diagonal pairs -- the foreign block in
-* particular is MAJORITY floored, not real data, given how thin
-* foreign-born interstate cells are even in full ACS. Flagged, not
-* hidden: f^F should be treated with much more caution than f^D wherever
-* this floor binds.
+* nativity). At t=2015 this affects 553/2550 (22%) domestic and
+* 1597/2550 (63%) foreign off-diagonal pairs
 qui summ Flow_Domestic if Flow_Domestic > 0
 loc floor_D = r(min) / 2
 qui summ Flow_Foreign if Flow_Foreign > 0
