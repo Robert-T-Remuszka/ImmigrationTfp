@@ -3,35 +3,20 @@ do Globals
 
 /*================================================================
 ACS analog of MakePi.do. Builds a LONG (Origin, Destination, Year)
-state-to-state migration FLOW panel from ACS 2000-2022, for the same
-eq.-(27) analog (Nu_Derivation.md) that MakePi.do builds from CPS-ASEC.
-
-WHY THIS FILE EXISTS (2026-08-20): the CPS-ASEC version of this panel
-gave correctly-specified but statistically unusable estimates of
-(nu^D, nu^F) -- confirmed by direct inspection (sign conventions, merge
-lead/lag directions, pairid directionality all correct; Hansen J passes)
--- because CPS-ASEC's ~75k households/year gives only 1-5 respondents
-per (Origin,Destination,Year) migration corridor, so ~80% of Domestic
-and ~93% of Foreign cells are exact zeros and the wage-ratio regressor's
-within-pair signal (pair-demeaned SD ~0.054) is swamped by clustered
-noise. CDP themselves flag exactly this problem (p.763 fn.36: March CPS
-is too thin to build interregional migration flows) and sidestep it by
-using ACM's pre-aggregated flow matrices instead. ACS gives a structural
-fix rather than a workaround: ~2-3M person records/year (30-40x CPS-ASEC),
-so corridor cells are far less frequently zero and far less noisy.
+state-to-state migration FLOW panel from ACS 2000-2022
 
 Variable mapping from MakePi.do (CPS) to here (ACS), confirmed against
 Acs2019.dta's actual coding before writing this file:
   ASECWT      -> PERWT       (person weight; no separate migration weight in ACS)
   MIGSTA1     -> MIGPLAC1    (prior-year state; SAME coding convention: 1-56 are
-                               FIPS state codes, but ACS's "did not move" sentinel
+                               FIPS state codes, but ACS's "did not move" code
                                is 0, not CPS's "99", and "abroad" is >=100, not
                                CPS's single code "91")
   UHRSWORKT   -> UHRSWORK    (ACS ranges 0-99 with 0 itself as the not-in-universe
-                               sentinel -- no separate 999/998-style code the way
+                             -- no separate 999/998-style code the way
                                CPS's UHRSWORKT has, so `< 35` alone already excludes
                                NIU without CPS's extra `>= 997` clause)
-  INCWAGE     -> INCWAGE     (same variable name; topcode/missing sentinel is
+  INCWAGE     -> INCWAGE     (same variable name; topcode/missing is
                                999999 only -- ACS has no second code analogous to
                                CPS's 999998)
   CITIZEN==9  -> (dropped)   (ACS's CITIZEN has no NIU/unknown code the way CPS's
@@ -44,7 +29,7 @@ Acs2019.dta's actual coding before writing this file:
   HFLAG fix   -> (not needed) (ACS has no CPS-ASEC-style split-sample year)
 
 Acs2000.dta has no MIGPLAC1 at all -- IPUMS confirms the "residence 1 year
-ago" question wasn't fielded in that transitional year (the standard rolling
+ago" question wasn't fielded in that year (the standard rolling
 ACS design, and this question, start in 2001). Still used for the stock/wage
 panel (its own labor stock/wage cross-section doesn't need MIGPLAC1, and
 Year=2000 stock is needed as the Origin-at-t denominator for Year=2001 flows)
