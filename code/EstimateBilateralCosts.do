@@ -96,11 +96,11 @@ use "${Data}/AggMigrationRateByYear.dta", clear
 di as text "--- Aggregate (stock-weighted) migration rate by year ---"
 list, sep(0)
 
-twoway (line agg_rate_domestic year, lcolor(navy) lwidth(medthick)) ///
-       (line agg_rate_foreign  year, lcolor(maroon) lwidth(medthick)), ///
-    ytitle("Aggregate interstate migration rate") xtitle("Year") ///
+twoway (line agg_rate_domestic year, lcolor(ebblue%85) lwidth(medthick)) ///
+       (line agg_rate_foreign  year, lcolor(orange%85) lwidth(medthick)) if year >= 2001, ///
+    ytitle("Aggregate interstate migration rate") xtitle("") ///
+    ylabel(, nogrid) xlabel(2001(4)2021, nogrid) xscale(range(2001 2021)) ///
     legend(order(1 "Domestic" 2 "Foreign") pos(6) rows(1)) ///
-    title("Aggregate interstate migration rate, ACS 2001-2022") ///
     name(aggrate, replace)
 graph export "${Graphs}/AggMigrationRateByYear.pdf", replace as(pdf)
 

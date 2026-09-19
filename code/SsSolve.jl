@@ -46,3 +46,40 @@ choiceprob_heatmap = plot(
     heatmap(log10.(s.Πᶠ), title = "log₁₀ Πᶠ", xlabel = "Destination", ylabel = "Origin", yflip = true, grid = false),
     layout = (1, 2), size = (1100, 450)
 )
+
+# %% Heatmaps of the inverted bilateral migration costs fᵈ, fᶠ, for the paper.
+# Both panels share one color scale so the domestic/foreign cost structures
+# are directly comparable.
+costs = load_bilateral_costs()
+state_labels = labels[1:end - 1]
+clims = (0, max(maximum(costs.fᵈ), maximum(costs.fᶠ)))
+
+# Tight axis limits (cells are centered on 1:51) so there's no default padding
+# between the axis and the first/last row or column of the heatmap.
+tight_lims = (0.5, 51.5)
+
+d_heatmap = heatmap(costs.fᵈ, title = "Domestic Born", xlabel = "Destination", ylabel = "Origin",
+    xticks = (1:51, state_labels), yticks = (1:51, state_labels), xrotation = 90,
+    xtickfontsize = 7, ytickfontsize = 7, yflip = true, clims = clims,
+    xlims = tight_lims, ylims = tight_lims,
+    color = :viridis, aspect_ratio = 1, colorbar = false, grid = false,
+    left_margin = 12Plots.mm, bottom_margin = 8Plots.mm)
+f_heatmap = heatmap(costs.fᶠ, title = "Foreign Born", xlabel = "Destination", ylabel = "Origin",
+    xticks = (1:51, state_labels), yticks = (1:51, state_labels), xrotation = 90,
+    xtickfontsize = 7, ytickfontsize = 7, yflip = true, clims = clims,
+    xlims = tight_lims, ylims = tight_lims,
+    color = :viridis, aspect_ratio = 1, colorbar = false, grid = false,
+    left_margin = 12Plots.mm, bottom_margin = 8Plots.mm, right_margin = 10Plots.mm)
+
+# A single shared colorbar in its own panel, so it doesn't shrink either
+# heatmap's plotting area the way putting colorbar=true on one panel would.
+# All-NaN heatmap draws no visible cells, only the colorbar itself.
+cbar = heatmap(fill(NaN, 2, 2), clims = clims, color = :viridis, colorbar = true,
+    colorbar_title = "Cost", framestyle = :none, legend = false,
+    xaxis = false, yaxis = false, xticks = false, yticks = false,
+    right_margin = 10Plots.mm)
+
+cost_heatmap = plot(d_heatmap, f_heatmap, cbar,
+    layout = @layout([a b c{0.10w}]), size = (2000, 850))
+savefig(cost_heatmap, joinpath(graphs, "BilateralCostsHeatmap.pdf"))
+cost_heatmap
