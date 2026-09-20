@@ -17,7 +17,16 @@ Random.seed!(1);
 p_pe = Parameters(; fᵈ_ROW = 0.0, fᶠ_ROW = 0.0);
 Wᵈ = exp.(0.3 .* randn(p_pe.N));
 Wᶠ = exp.(0.3 .* randn(p_pe.N));
-s = Solution(p_pe, Wᵈ, Wᶠ);
+
+# Total 2015 world population by nativity, normalized so total_Lᵈ = 1 and
+# total_Lᶠ is the domestic/foreign ratio -- only the ratio matters for
+# market clearing (see load_total_population()), so this keeps the
+# stationary-distribution linear solve on a well-scaled numerical footing.
+tp = load_total_population();
+total_Lᵈ = 1.0;
+total_Lᶠ = tp.total_Lᶠ / tp.total_Lᵈ;
+
+s = Solution(p_pe, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ);
 
 # State name labels (abbreviated), read off StateAnalysisPreTfp.dta and sorted
 # to match load_bilateral_costs()'s FIPS-code state ordering.
@@ -47,7 +56,7 @@ choiceprob_heatmap = plot(
     layout = (1, 2), size = (1100, 450)
 )
 
-# %% Heatmaps of the inverted bilateral migration costs fᵈ, fᶠ, for the paper.
+# %% ############################## Heatmaps of the inverted bilateral migration costs fᵈ, fᶠ ####################
 # Both panels share one color scale so the domestic/foreign cost structures
 # are directly comparable.
 costs = load_bilateral_costs()
@@ -83,3 +92,34 @@ cost_heatmap = plot(d_heatmap, f_heatmap, cbar,
     layout = @layout([a b c{0.10w}]), size = (2000, 850))
 savefig(cost_heatmap, joinpath(graphs, "BilateralCostsHeatmap.pdf"))
 cost_heatmap
+
+# %% ################################# Full steady-state demo: 
+# fᵈ_ROW, fᶠ_ROW still placeholders (0), and
+# Wᵈ_ROW, Wᶠ_ROW set to 1 rather than a real wage figure -- the theoretical
+# Y = (θ/(r+δ))^(θ/(1-θ))ZL used for the 51 US states has no real-dollar anchor
+ss = solve_steady_state(p_pe; Wᵈ_ROW = 1.0, Wᶠ_ROW = 1.0, total_Lᵈ, total_Lᶠ,
+    W0ᵈ = ones(p_pe.N - 1), W0ᶠ = ones(p_pe.N - 1))
+
+# %% Steady-state wages by location
+wage_plot = plot(
+    bar(1:p_pe.N, ss.Wᵈ, title = "Wᵈ", legend = false, xticks = (1:p_pe.N, labels),
+        xrotation = 45, xtickfontsize = 5, grid = false,
+        ylims = extrema(ss.Wᵈ) .+ (-0.1, 0.1) .* (extrema(ss.Wᵈ)[2] - extrema(ss.Wᵈ)[1])),
+    bar(1:p_pe.N, ss.Wᶠ, title = "Wᶠ", legend = false, xticks = (1:p_pe.N, labels),
+        xrotation = 45, xtickfontsize = 5, grid = false,
+        ylims = extrema(ss.Wᶠ) .+ (-0.1, 0.1) .* (extrema(ss.Wᶠ)[2] - extrema(ss.Wᶠ)[1])),
+    layout = (2, 1), size = (1000, 700)
+)
+
+# %% Steady-state labor supplies by location (log scale -- ROW's stock is
+# orders of magnitude larger than any single US state's)
+log10Lᵈ, log10Lᶠ = log10.(ss.Lᵈ), log10.(ss.Lᶠ)
+laborsupply_plot = plot(
+    bar(1:p_pe.N, log10Lᵈ, title = "log₁₀ Lᵈ", legend = false, xticks = (1:p_pe.N, labels),
+        xrotation = 45, xtickfontsize = 5, grid = false,
+        ylims = extrema(log10Lᵈ) .+ (-0.1, 0.1) .* (extrema(log10Lᵈ)[2] - extrema(log10Lᵈ)[1])),
+    bar(1:p_pe.N, log10Lᶠ, title = "log₁₀ Lᶠ", legend = false, xticks = (1:p_pe.N, labels),
+        xrotation = 45, xtickfontsize = 5, grid = false,
+        ylims = extrema(log10Lᶠ) .+ (-0.1, 0.1) .* (extrema(log10Lᶠ)[2] - extrema(log10Lᶠ)[1])),
+    layout = (2, 1), size = (1000, 700)
+)
