@@ -61,7 +61,10 @@ println("share_F_us     = ", share_F_us, "  (target ", target_F_us, ")")
 println("immigration_rate_F = ", immigration_rate_F, "  (target ", target_F_immigration, ")")
 
 # %% Save alongside the other estimated-parameter jld2 files (task shares,
-# scale parameters, ρ)
+# scale parameters, ρ) -- model-implied moments are saved alongside their
+# targets so downstream table-building doesn't need to re-solve the model.
 jldsave(joinpath(@__DIR__, "RowCosts.jld2");
     p_star = (; fᵈ_ROW, Bᵈ_ROW, fᶠ_ROW, Bᶠ_ROW,
-                target_D_abroad, target_D_return, target_F_us, target_F_immigration))
+                target_D_abroad, target_D_return, target_F_us, target_F_immigration,
+                model_D_abroad = share_D_abroad, model_D_return = return_rate_D,
+                model_F_us = share_F_us, model_F_immigration = immigration_rate_F))
