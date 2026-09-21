@@ -1,31 +1,13 @@
 # The Macroeconomic Effects of Immigration: The Gains from Task Specialization
 
-# Model and Current Status
+# Description
 The model is a dynamic discrete-choice migration model over 52 locations (50
 US states + DC, referred to collectively as US "states", plus a single
 aggregate "Rest of World" location) and two nativities (domestic- and
-foreign-born). Workers choose locations forward-lookingly to maximize
+foreign-born). Workers choose locations in a forward-looking manner to maximize
 expected discounted utility, with a task-specialization production side
 (state-level output combining domestic and foreign labor across a continuum
 of tasks) that ties migration to state-level productivity and factor shares.
-
-The 51x51 interior US bilateral migration costs and the production/task-
-allocation parameters (μ_z, ξ_z, ξ_ω, ρ, ν^D, ν^F, θ_l, δ_l) are estimated
-directly from ACS/CPS data (see Panel A of the parameter table below). The
-model's link to the Rest-of-World location -- the ROW migration cost and a
-nativity-specific "home bias" utility premium for ROW (see the paper's
-eq. 2.1-2.2, assumption A1) -- cannot be estimated the same way, since
-outward flows to ROW aren't observed in the ACS/CPS. These four parameters
-(f^D_ROW, B^D_ROW, f^F_ROW, B^F_ROW) are instead jointly calibrated by
-indirect inference to match two stock-share and two flow-rate targets built
-from UN migrant stock data and ACS return/immigration flow counts (Panel B).
-
-**Done:** production/task-allocation parameter estimation, interior
-bilateral costs, ROW linkage calibration, non-stochastic steady-state
-solution.
-**Pending:** the dynamic migration-cost shock parameters (ψ, σ), to be
-estimated by indirect inference against the section-4 LPIV impulse
-responses -- Panel B's ψ, σ rows are blank until that step.
 
 # Raw Data Sources
 The data come from several sources. In order to download the data and replicate the analysis you will need your own API keys. The sources I pull from and the code that generates the raw data are:
@@ -53,11 +35,10 @@ The data come from several sources. In order to download the data and replicate 
 # Run Order
 The pipeline runs in four phases: (1) build the state panel and estimate the
 production/task-allocation parameters directly from data, (2) build the
-Rest-of-World linkage data, (3) solve the non-stochastic steady state and
-calibrate the ROW linkage parameters, (4) build tables. A fifth phase
-(dynamic indirect inference for ψ, σ) is not yet implemented.
+Rest-of-World data, (3) solve the non-stochastic steady state and
+calibrate the ROW linkage parameters, (4) build tables.
 
-## Phase 1: State Panel and Directly-Estimated Parameters
+## Step 1: State Panel and Directly-Estimated Parameters
 1. [**Clean the Pre-Period Data**](code/CleanPrePeriod.do)
     * Output: ```data/PrePeriod.dta```
 2. **API Extractions and Saving**:
@@ -90,9 +71,9 @@ calibrate the ROW linkage parameters, (4) build tables. A fifth phase
     * Input(s): ```data/AcsPiPanel.dta```
     * Output(s): ```data/BilateralCosts2015.dta```, ```data/AggMigrationRateByYear.dta```
 
-## Phase 2: Rest-of-World Linkage Data
+## Step 2: Rest-of-World Linkage Data
 These build the empirical targets and inputs needed to calibrate the ROW
-migration cost and home-bias parameters (Phase 3), since outward flows from
+migration cost and home-bias parameters, since outward flows from
 the US to ROW aren't observed in the ACS/CPS.
 1. [**Fetch ROW Income Data**](code/FetchRowIncConstants.py) (World Bank GDP/labor force, IRS foreign-earned income; no API keys needed)
     * Output(s): ```data/WorldBankGdpLaborForce2015.csv```, ```data/IrsForeignEarnedIncome.csv```
@@ -106,27 +87,16 @@ the US to ROW aren't observed in the ACS/CPS.
     * Input(s): ```data/acs/Acs2016.dta```
     * Output(s): ```data/RowFlowCounts.dta```
 
-## Phase 3: Steady-State Solution and ROW Calibration
+## Step 3: Steady-State Solution and ROW Calibration
 1. [**Steady-State Solver**](code/SsSolve.jl) ([associated types and functions](code/SsSolve_Functions.jl))
-    * Defines `Parameters`, `Solution`, and the non-stochastic steady-state solve (GTH algorithm for the stationary distribution; finite-difference Newton solve for market-clearing wages).
+    * Defines `Parameters`, `Solution`, and the non-stochastic steady-state solve.
     * Input(s): ```AggSupply.jld2```, ```data/ThetaDelta.dta```, ```data/CpEstimates.dta```, ```data/NuBetaEstimatesAcs.dta```, ```data/BilateralCosts2015.dta```, ```data/StateAnalysisPreTfp.dta```, ```data/PopulationConstants.dta```
-    * This script is a demo/diagnostic driver (plots, heatmaps); it is `include`d by the calibration script below rather than run standalone as part of the pipeline.
 2. [**Calibrate ROW Costs and Home Bias**](code/RowCostsEstimate.jl) ([associated types and functions](code/RowCostsEstimate_Functions.jl)) (f^D_ROW, B^D_ROW, f^F_ROW, B^F_ROW)
-    * Jointly matches two stock-share targets (share of US-born abroad, share of foreign-born in the US labor force) and two flow-rate targets (domestic return-migration rate, foreign immigration rate) via a local nonlinear solve -- see the script's docstrings for why a symmetric ROW cost alone cannot match the stock-share targets without the home-bias amenity.
+    * Jointly matches two stock-share targets (share of US-born abroad, share of foreign-born in the US labor force) and two flow-rate targets (domestic return-migration rate, foreign immigration rate) via a local nonlinear solve
     * Input(s): ```data/RowIncomeConstants.dta```, ```data/PopulationConstants.dta```, ```data/RowFlowCounts.dta```, ```data/StateAnalysisPreTfp.dta```, plus everything `SsSolve_Functions.jl` needs
     * Output(s): ```code/RowCosts.jld2```
 
-## Phase 4: Tables
+## Step 4: Tables and Other Output
 1. [**Build Parameter Table**](code/MakeTables.jl)
     * Input(s): ```data/CpEstimates.dta```, ```AggSupply.jld2```, ```data/NuBetaEstimatesAcs.dta```, ```code/RowCosts.jld2```
     * Output(s): ```output/tables/ParameterEstimates.tex```
-
-## Pending: Dynamic Indirect Inference (ψ, σ)
-Not yet implemented. The empirical LPIV impulse responses this will target
-are estimated by [code/MakeIRF.do](code/MakeIRF.do) (input:
-```data/StateAnalysis.dta```, output: plots and ```IRFEstimates.dta```),
-with lag-selection and first-stage diagnostics in
-[code/LagSelect.do](code/LagSelect.do),
-[code/LagExog.do](code/LagExog.do), and
-[code/FirstStage.do](code/FirstStage.do). [code/Rotemberg_Weights.do](code/Rotemberg_Weights.do)
-decomposes the shift-share instrument's identifying variation.
