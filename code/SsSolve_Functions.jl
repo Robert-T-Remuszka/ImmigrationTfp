@@ -79,18 +79,65 @@ function solve_value_choiceprobs(W::Vector{T}, f::Matrix{T}, β::T, ν::T;
 end
 
 """
+Probability that a resident of location l leaves it, i.e. 1-Π[l,l], computed
+directly from the softmax's off-diagonal weights rather than as one minus the
+stored diagonal entry. When leaving l is very costly, Π[l,l] rounds to
+exactly 1.0 in floating point -- the true leaving probability is smaller than
+machine epsilon relative to 1 -- so 1-Π[l,l] silently returns exactly 0
+regardless of how large the cost actually is, masking any further increase in
+cost as "no additional effect" on a moment defined this way. Summing the
+off-diagonal softmax weights directly avoids ever subtracting two near-equal
+numbers, so it stays accurate all the way down to the smallest doubles.
+"""
+function leave_probability(V::Vector{T}, f::Matrix{T}, β::T, ν::T, l::Integer) where {T <: Real}
+
+    x = (β .* V .- f[l, :]) ./ ν
+    e = exp.(x .- maximum(x))
+
+    return (sum(e) - e[l]) / sum(e)
+
+end
+
+"""
 Stationary distribution of a row-stochastic transition matrix Π, scaled to
-sum to `total`: solves (Π' - I)L = 0 with the last row replaced by the
-mass-normalization constraint ΣL = total. Π conserves mass exactly (its rows
-sum to one), so this linear system is well posed.
+sum to `total`, via the GTH (Grassmann-Taksar-Heyman) algorithm. GTH
+eliminates states one at a time from N down to 1, at each step redistributing
+the eliminated state's outgoing probability back onto the remaining states --
+every intermediate quantity is a sum, product, or ratio of nonnegative
+numbers, so it cannot produce a negative component the way a generic linear
+solve on (Π'-I) can. That matters here specifically: large migration costs
+make Π nearly block-diagonal (nearly reducible), which is exactly where a
+generic solve loses accuracy to floating-point cancellation and can return
+small negative entries -- entries that are never legitimate, since Π (a
+softmax output) has full support, so by Perron-Frobenius the true stationary
+distribution is strictly positive everywhere.
 """
 function stationary_distribution(Π::Matrix{T}, total::Real) where {T <: Real}
+
     N = size(Π, 1)
-    A = Matrix{T}(Π') - I
-    b = zeros(T, N)
-    A[end, :] .= one(T)
-    b[end] = total
-    return A \ b
+    a = Matrix{Float64}(Π) - I  # generator Q = Π - I: rows sum to zero
+    col_save = zeros(Float64, N, N)
+    S = zeros(Float64, N)
+
+    for k in N:-1:2
+        S[k] = sum(@view a[k, 1:k - 1])
+        for i in 1:k - 1
+            col_save[i, k] = a[i, k]
+        end
+        for i in 1:k - 1, j in 1:k - 1
+            i == j && continue
+            a[i, j] += a[i, k] * a[k, j] / S[k]
+        end
+    end
+
+    π = zeros(Float64, N)
+    π[1] = 1.0
+    for k in 2:N
+        π[k] = sum(π[i] * col_save[i, k] for i in 1:k - 1) / S[k]
+    end
+
+    return T.(π ./ sum(π) .* total)
+
 end
 
 """
@@ -223,11 +270,14 @@ function load_bilateral_costs()
 end
 
 """
-Build Parameters. Every value except fᵈ_ROW, fᶠ_ROW (the domestic/foreign
-migration cost between any US state and Rest of World, assumed common across
-states) is loaded from an already-estimated source.
+Load every Parameters input except the four ROW-linkage costs, once. Splitting
+this disk-reading step out of Parameters() means a grid or threaded search
+over those four costs can build thousands of Parameters objects without
+touching disk on the hot path -- JLD2 reads aren't thread-safe for concurrent
+access, and re-reading the same five files on every evaluation is wasted I/O
+regardless of threading.
 """
-function Parameters(; fᵈ_ROW::Real, fᶠ_ROW::Real, β::Real = 0.96)
+function load_fixed_parameters(; β::Real = 0.96)
 
     r  = 1 / β - 1
     θδ = load_theta_delta()
@@ -236,24 +286,53 @@ function Parameters(; fᵈ_ROW::Real, fᶠ_ROW::Real, β::Real = 0.96)
     (; μ_z, ξ_ω, ξ_z) = load_cp_estimate()
     (; νᵈ, νᶠ) = load_scale_estimate()
     (; fᵈ, fᶠ) = load_bilateral_costs()
-
+    A = calibrate_scale(θ, δ, r, ρ, μ_z, ξ_ω, ξ_z)
     L = size(fᵈ, 1)
-    N = L + 1
+
+    return (β = Float64(β), r = Float64(r), θ = Float64(θ), δ = Float64(δ), ρ = Float64(ρ),
+            μ_z = Float64(μ_z), ξ_z = Float64(ξ_z), ξ_ω = Float64(ξ_ω),
+            νᵈ = Float64(νᵈ), νᶠ = Float64(νᶠ), A = Float64(A),
+            fᵈ = Matrix{Float64}(fᵈ), fᶠ = Matrix{Float64}(fᶠ), L = L, N = L + 1)
+
+end
+
+"""
+Build Parameters from pre-loaded `fixed` (see load_fixed_parameters) plus the
+four ROW-linkage costs, touching no disk. The 51×51 interior keeps its
+estimated f^n_{ll'}=f^n_{l'l} symmetry (Assumption A3), but row N (ROW as
+origin, i.e. entering the US) and column N (ROW as destination, i.e. leaving
+the US) are separate free parameters per nativity, not required to match --
+`f_ROW_in` is the row-N cost (ROW→state), `f_ROW_out` is the column-N cost
+(state→ROW). f_{N,N}=0 throughout (staying in ROW costs nothing).
+"""
+function Parameters(fixed::NamedTuple, fᵈ_ROW_in::Real, fᵈ_ROW_out::Real, fᶠ_ROW_in::Real, fᶠ_ROW_out::Real)
+
+    (; β, r, θ, δ, ρ, μ_z, ξ_z, ξ_ω, νᵈ, νᶠ, A, fᵈ, fᶠ, L, N) = fixed
 
     fᵈ_full = zeros(N, N)
     fᶠ_full = zeros(N, N)
     fᵈ_full[1:L, 1:L] .= fᵈ
     fᶠ_full[1:L, 1:L] .= fᶠ
-    fᵈ_full[1:L, N]   .= fᵈ_ROW
-    fᵈ_full[N, 1:L]   .= fᵈ_ROW
-    fᶠ_full[1:L, N]   .= fᶠ_ROW
-    fᶠ_full[N, 1:L]   .= fᶠ_ROW
+    fᵈ_full[1:L, N]   .= fᵈ_ROW_out
+    fᵈ_full[N, 1:L]   .= fᵈ_ROW_in
+    fᶠ_full[1:L, N]   .= fᶠ_ROW_out
+    fᶠ_full[N, 1:L]   .= fᶠ_ROW_in
 
-    A = calibrate_scale(θ, δ, r, ρ, μ_z, ξ_ω, ξ_z)
+    return Parameters(β, r, θ, δ, ρ, μ_z, ξ_z, ξ_ω, νᵈ, νᶠ, A, fᵈ_full, fᶠ_full, N)
 
-    return Parameters(Float64(β), Float64(r), Float64(θ), Float64(δ), Float64(ρ),
-                       Float64(μ_z), Float64(ξ_z), Float64(ξ_ω), Float64(νᵈ), Float64(νᶠ), Float64(A),
-                       Matrix{Float64}(fᵈ_full), Matrix{Float64}(fᶠ_full), N)
+end
+
+"""
+Convenience wrapper: load every fixed input from disk, then build Parameters.
+For one-off calls (SsSolve.jl's demos); a grid/threaded search should call
+load_fixed_parameters() once and use the Parameters(fixed, ...) method above
+instead, to avoid repeated disk I/O and JLD2's thread-unsafety.
+"""
+function Parameters(; fᵈ_ROW_in::Real, fᵈ_ROW_out::Real, fᶠ_ROW_in::Real, fᶠ_ROW_out::Real,
+                     β::Real = 0.96)
+
+    fixed = load_fixed_parameters(; β)
+    return Parameters(fixed, fᵈ_ROW_in, fᵈ_ROW_out, fᶠ_ROW_in, fᶠ_ROW_out)
 
 end
 

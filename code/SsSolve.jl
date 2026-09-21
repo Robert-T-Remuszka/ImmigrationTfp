@@ -6,15 +6,15 @@ include("SsSolve_Functions.jl");
 
 default(dpi = 300);
 
-# %% fᵈ_ROW, fᶠ_ROW are not yet calibrated -- NaN placeholders until then.
-p = Parameters(; fᵈ_ROW = NaN, fᶠ_ROW = NaN);
+# %% The four ROW-linkage costs are not yet calibrated -- NaN placeholders.
+p = Parameters(; fᵈ_ROW_in = NaN, fᵈ_ROW_out = NaN, fᶠ_ROW_in = NaN, fᶠ_ROW_out = NaN);
 
 # %% Partial-equilibrium demo: solve Vᵈ, Vᶠ, Πᵈ, Πᶠ at a placeholder wage
-# vector, with fᵈ_ROW, fᶠ_ROW set to 0. Wages aren't solved for yet, so a
+# vector, with all four ROW costs set to 0. Wages aren't solved for yet, so a
 # little noise is added around 1 just to see some variation in this exercise
 # -- not a real wage vector.
 Random.seed!(1);
-p_pe = Parameters(; fᵈ_ROW = 0.0, fᶠ_ROW = 0.0);
+p_pe = Parameters(; fᵈ_ROW_in = 0.0, fᵈ_ROW_out = 0.0, fᶠ_ROW_in = 0.0, fᶠ_ROW_out = 0.0);
 Wᵈ = exp.(0.3 .* randn(p_pe.N));
 Wᶠ = exp.(0.3 .* randn(p_pe.N));
 
@@ -93,8 +93,8 @@ cost_heatmap = plot(d_heatmap, f_heatmap, cbar,
 savefig(cost_heatmap, joinpath(graphs, "BilateralCostsHeatmap.pdf"))
 cost_heatmap
 
-# %% ################################# Full steady-state demo: 
-# fᵈ_ROW, fᶠ_ROW still placeholders (0), and
+# %% ################################# Full steady-state demo:
+# all four ROW costs still placeholders (0), and
 # Wᵈ_ROW, Wᶠ_ROW set to 1 rather than a real wage figure -- the theoretical
 # Y = (θ/(r+δ))^(θ/(1-θ))ZL used for the 51 US states has no real-dollar anchor
 ss = solve_steady_state(p_pe; Wᵈ_ROW = 1.0, Wᶠ_ROW = 1.0, total_Lᵈ, total_Lᶠ,
