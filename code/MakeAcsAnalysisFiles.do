@@ -9,8 +9,11 @@ Loops once over data/acs/Acs2001.dta-Acs2024.dta to build three files:
      probability probit; feeds EstimateCp.do
   3. StateWageSupplyPanel.dta -- state x year x nativity labor supply,
      hourly wages (unresidualized and composition-adjusted/residualized),
-     and gross in-migration (from MIGPLAC1, aggregated across all US
-     origins); not currently read by any other step in this pipeline
+     gross in-migration (from MIGPLAC1, aggregated across all US origins),
+     and, by nationality (BPL): current-period arrivals (Inflow<code>) and
+     stock (Stock<code>) -- the numerator and denominator for a shift-share
+     instrument's growth-rate term. Not currently read by any other step in
+     this pipeline.
 
 All branches share UHRSWORK>=35. The individual-level probit file (2) and
 the state wage/supply panel (3) additionally require a full-time-full-year
@@ -31,6 +34,7 @@ frame create IndividualStateWagePanel
 frame create IndividualPanel
 frame create StatePersonPanel
 frame create NationalityFlowPanel
+frame create NationalityStockPanel
 
 forval yr = 2001/2024 {
 
@@ -152,6 +156,19 @@ forval yr = 2001/2024 {
 
             frame NationalityFlowPanel: xframeappend default
         }
+    restore
+
+    /*---------------- FOREIGN-BORN STOCK BY NATIONALITY (BPL) --------------------*/
+    preserve
+        tostring STATEFIP, replace
+        replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
+
+        keep if Foreign == 1
+        collapse (sum) PERWT, by(STATEFIP YEAR BPL)
+        ren PERWT Stock
+        ren YEAR Year
+
+        frame NationalityStockPanel: xframeappend default
     restore
 
     /*================================================================
@@ -320,6 +337,23 @@ frame NationalityFlowPanel {
 frame NationalityFlowPanel: tempfile NationalityInflowFile
 frame NationalityFlowPanel: save `NationalityInflowFile'
 
+* Foreign-born stock by nationality (BPL), wide by BPL code -- one column
+* per country/region-of-birth code, e.g. Stock200 for BPL==200 (Mexico).
+* This is L^F_{m,l,t}: the growth-rate denominator for the eventual
+* shift-share instrument (paired with the Inflow<BPL> columns above as the
+* numerator), on the same sample restriction (UHRSWORK>=35, no FTFY floor)
+* as the arrivals themselves, so numerator and denominator are consistent.
+frame NationalityStockPanel {
+    capture frame drop default
+    reshape wide Stock, i(STATEFIP Year) j(BPL)
+    ds Stock*
+    foreach v of varlist `r(varlist)' {
+        replace `v' = 0 if mi(`v')
+    }
+}
+frame NationalityStockPanel: tempfile NationalityStockFile
+frame NationalityStockPanel: save `NationalityStockFile'
+
 /*================================================================
   BRANCH 2 OUTPUT: IndividualCpAnalysis.dta
 ================================================================*/
@@ -466,12 +500,18 @@ merge 1:1 STATEFIP Year using `UnresidFile', nogen
 merge 1:1 STATEFIP Year using `ResidFile', nogen
 merge 1:1 STATEFIP Year using `InflowFile', nogen
 merge 1:1 STATEFIP Year using `NationalityInflowFile', nogen
+merge 1:1 STATEFIP Year using `NationalityStockFile', nogen
 
 loc inflowdomfor "Inflow_Domestic Inflow_Foreign"
 ds Inflow*
 loc allinflowvars `r(varlist)'
-    loc bplinflowvars: list allinflowvars - inflowdomfor
+loc bplinflowvars: list allinflowvars - inflowdomfor
 foreach v of local bplinflowvars {
+    replace `v' = 0 if mi(`v')
+}
+
+ds Stock*
+foreach v of varlist `r(varlist)' {
     replace `v' = 0 if mi(`v')
 }
 
@@ -501,15 +541,21 @@ la var Wage_Domestic_Unresid "Domestic-born hourly wage, PERWT-weighted mean, re
 la var Wage_Foreign_Unresid  "Foreign-born hourly wage, PERWT-weighted mean, real 2009 USD (CPI-U deflated), FTFY sample"
 la var Wage_Domestic_Resid   "Domestic-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
 la var Wage_Foreign_Resid    "Foreign-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
-la var Inflow_Domestic       "Domestic-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, FTFY sample, interstate only); missing for Year=2001 (needs a Year=2000 origin stock not in this extract)"
-la var Inflow_Foreign        "Foreign-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, FTFY sample, interstate only -- excludes new arrivals from abroad, unlike the Inflow<BPL> columns below); missing for Year=2001"
+la var Inflow_Domestic       "Domestic-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor, interstate only); missing for Year=2001 (needs a Year=2000 origin stock not in this extract)"
+la var Inflow_Foreign        "Foreign-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor, interstate only -- excludes new arrivals from abroad, unlike the Inflow<BPL> columns below); missing for Year=2001"
 
 ds Inflow*
 loc allinflowvars `r(varlist)'
-    loc bplinflowvars: list allinflowvars - inflowdomfor
+loc bplinflowvars: list allinflowvars - inflowdomfor
 foreach v of local bplinflowvars {
     loc bplcode = substr("`v'", 7, .)
-    la var `v' "Foreign-born arrivals with BPL==`bplcode', realized in Year (ACS MIGPLAC1, FTFY sample; includes both interstate moves and new arrivals from abroad, unlike Inflow_Foreign above)"
+    la var `v' "Foreign-born arrivals with BPL==`bplcode', realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor; includes both interstate moves and new arrivals from abroad, unlike Inflow_Foreign above)"
+}
+
+ds Stock*
+foreach v of varlist `r(varlist)' {
+    loc bplcode = substr("`v'", 6, .)
+    la var `v' "Foreign-born stock (L^F_m,l,t) with BPL==`bplcode' in Year (ACS, UHRSWORK>=35 sample, no FTFY floor -- same sample as the matching Inflow<BPL> column, for a consistent growth-rate numerator/denominator)"
 }
 
 order STATEFIP Year Supply_Domestic Supply_Foreign ///
