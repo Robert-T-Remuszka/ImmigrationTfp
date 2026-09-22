@@ -12,17 +12,17 @@ of tasks) that ties migration to state-level productivity and factor shares.
 # Raw Data Sources
 The data come from several sources. In order to download the data and replicate the analysis you will need your own API keys. The sources I pull from and the code that generates the raw data are:
 1. [**IPUMS USA**](https://usa.ipums.org/usa/)
-    * [Notebook File](code/AcsPull.ipynb)
+    * [Notebook File](code/AcsPull.ipynb) -- pulls ACS 2001-2024: STATEFIP, CITIZEN, BPL, AGE, SEX, RACE, EDUC, UHRSWORK, WKSWORK1/WKSWORK2, INCWAGE, OCC1990, MIGPLAC1.
     * API Key Needed: Yes
 2. [**IPUMS CPS**](https://cps.ipums.org/cps/)
-    * [Notebook File](code/CpsPull.ipynb)
+    * [Notebook File](code/CpsPull.ipynb) -- supplies the pre-2001 years used by [MakeStateAnalysisPreTfp.do](code/MakeStateAnalysisPreTfp.do).
     * API Key Needed: Yes
 3. [**GDP by State and Industry**](https://apps.bea.gov/regional/downloadzip.htm)
     * Manual download from BEA's zip file archive.
 4. [**Capital Stock by State**](https://cfds.henuecon.education/index.php/data/44-yes-capital-data)
     * Method developed by El-Shagi and Yamarik (2021).
 5. [**Federal Reserve Economic Data (FRED)**](https://fred.stlouisfed.org/)
-    * Series: [GDP (Implicit Price Deflator, 2017 dollars)](https://fred.stlouisfed.org/series/A191RD3A086NBEA), [Gross Private Domestic Investment: Fixed Investment (Implicit Price Deflator)](https://fred.stlouisfed.org/series/A008RD3Q086SBEA)
+    * Series: [GDP (Implicit Price Deflator, 2017 dollars)](https://fred.stlouisfed.org/series/A191RD3A086NBEA), [Gross Private Domestic Investment: Fixed Investment (Implicit Price Deflator)](https://fred.stlouisfed.org/series/A008RD3Q086SBEA), [CPI-U, not seasonally adjusted](https://fred.stlouisfed.org/series/CPIAUCNS)
 6. [**UN Population Data**](https://population.un.org/wpp/)
 7. [**UN Migrant Stock Data**](https://www.un.org/development/desa/pd/content/international-migrant-stock)
 8. **World Bank Open Data** ([GDP](https://data.worldbank.org/indicator/NY.GDP.MKTP.CD), [labor force](https://data.worldbank.org/indicator/SL.TLF.TOTL.IN))
@@ -45,29 +45,33 @@ calibrate the ROW linkage parameters, (4) build tables.
     * *Remark:* The extract should be run before the read files
     * [ACS extract here](code/AcsPull.ipynb), [CPS extract here](code/CpsPull.ipynb)
     * [Read and save ACS extract](code/AcsRead.ipynb), [Read and save CPS extract](code/CpsRead.ipynb)
-3. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
+3. [**Construct the ACS Analysis Files**](code/MakeAcsAnalysisFiles.do) -- loops once over
+   `data/acs/Acs2001.dta`-`Acs2024.dta` to build the migration-flow panel, the individual-level probit file,
+   and the state-level wage/supply panel. The state panel applies a full-time-full-year restriction
+   (`UHRSWORK>=35` and weeks worked >=40) and reports hourly wages by state x year x nativity, both
+   unresidualized and composition-adjusted (residualized on age, age^2, education, sex, race with year fixed
+   effects), CPI-U deflated to real 2009 dollars. `StateWageSupplyPanel.dta` is not currently read by any other
+   step in this pipeline.
+    * Output(s): ```data/AcsPiPanel.dta```, ```data/IndividualCpAnalysis.dta```, ```data/StateWageSupplyPanel.dta```
+4. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
     * Output(s): ```data/StateAnalysisPreTfp.dta```
-4. [**Construct ACS Migration-Flow Panel**](code/MakeAcsPi.do)
-    * Output: ```data/AcsPiPanel.dta```
-5. [**Construct Individual ACS Data**](code/MakeIndividualAnalysis.do)
-    * Output: ```data/IndividualCpAnalysis.dta```
-6. [**Estimate Scale Parameters**](code/EstimateScaleBetaAcs.do) (ν^D, ν^F)
+5. [**Estimate Scale Parameters**](code/EstimateScaleBetaAcs.do) (ν^D, ν^F)
     * Input(s): ```data/AcsPiPanel.dta```
     * Output(s): ```data/NuBetaEstimatesAcs.dta```
-7. [**Estimate CA Parameters**](code/EstimateCp.do) (μ_z, ξ_z, ξ_ω)
+6. [**Estimate CA Parameters**](code/EstimateCp.do) (μ_z, ξ_z, ξ_ω)
     * Input(s): ```data/IndividualCpAnalysis.dta```
     * Output(s): ```data/CpEstimates.dta```
-8. [**Estimate EOS**](code/AggSupply_Estimate.jl) (ρ, via the factor-share condition)
+7. [**Estimate EOS**](code/AggSupply_Estimate.jl) (ρ, via the factor-share condition)
     * [Associated Types and Functions](code/AggSupply_Functions.jl)
     * Input(s): ```data/CpEstimates.dta```, ```data/StateAnalysisPreTfp.dta```
     * Output(s): ```data/StateTfpAndTaskAgg.csv```, ```AggSupply.jld2```
-9. [**Calibrate State Capital Shares**](code/CalibrateTheta.do) (θ_l, δ_l)
+8. [**Calibrate State Capital Shares**](code/CalibrateTheta.do) (θ_l, δ_l)
     * Input(s): ```data/CapByState/state_capital_yesdata21.dta```, ```data/StateAnalysisPreTfp.dta```
     * Output(s): ```data/ThetaDelta.dta```
-10. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
+9. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
     * Input(s): ```data/StateTfpAndTaskAgg.csv```
     * Output(s): ```data/StateAnalysis.dta```
-11. [**Estimate Interior Bilateral Migration Costs**](code/EstimateBilateralCosts.do) (f^n_ll' for l, l' both US states)
+10. [**Estimate Interior Bilateral Migration Costs**](code/EstimateBilateralCosts.do) (f^n_ll' for l, l' both US states)
     * Input(s): ```data/AcsPiPanel.dta```
     * Output(s): ```data/BilateralCosts2015.dta```, ```data/AggMigrationRateByYear.dta```
 
