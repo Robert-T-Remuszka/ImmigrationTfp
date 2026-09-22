@@ -2,34 +2,27 @@ clear all
 do Globals
 
 /*================================================================
-Consolidates the three ACS-derived analysis files that previously each ran
-their own independent loop over data/acs/Acs*.dta:
-  1. MakeAcsPi.do              -> AcsPiPanel.dta        (state stock/wage/
-     migration-flow panel; feeds EstimateScaleBetaAcs.do's nu^D/nu^F and
-     EstimateBilateralCosts.do's f^n_ll')
-  2. MakeIndividualAnalysis.do -> IndividualCpAnalysis.dta (individual-level
-     file for the choice-probability probit; feeds EstimateCp.do)
-  3. NEW state-level wage/supply panel -> StateWageSupplyPanel.dta (feeds
-     AggSupply_Estimate.jl's rho estimation; replaces
-     MakeStateAnalysisPreTfp.do now that state-level capital/output are no
-     longer needed)
+Loops once over data/acs/Acs2001.dta-Acs2024.dta to build three files:
+  1. AcsPiPanel.dta          -- state stock/wage/migration-flow panel; feeds
+     EstimateScaleBetaAcs.do's nu^D/nu^F and EstimateBilateralCosts.do's f^n_ll'
+  2. IndividualCpAnalysis.dta -- individual-level file for the choice-
+     probability probit; feeds EstimateCp.do
+  3. StateWageSupplyPanel.dta -- state x year x nativity labor supply,
+     hourly wages (unresidualized and composition-adjusted/residualized),
+     and gross in-migration (from MIGPLAC1, aggregated across all US
+     origins); not currently read by any other step in this pipeline
 
-Branches (1) and (2) are reproduced BIT-FOR-BIT on their existing sample
-restriction (UHRSWORK>=35, no weeks-worked floor) and wage definition (raw
-INCWAGE, no hours/weeks adjustment) -- nu, bilateral costs, and the probit
-estimates should not move as a side effect of this consolidation. Branch (3)
-uses a full-time-full-year (FTFY) restriction (UHRSWORK>=35 AND weeks
-worked>=40) and an hours/weeks-adjusted hourly wage, CPI-U deflated. This
-split is deliberate and temporary: branches (1)/(2) are to be raised to the
-same FTFY/hourly-wage standard in a later pass, at which point nu, bilateral
-costs, and the probit will need re-estimating.
+All branches share UHRSWORK>=35. The individual-level probit file (2) and
+the state wage/supply panel (3) additionally require a full-time-full-year
+(FTFY) restriction (weeks worked>=40); the migration-flow branches (1, and
+the nationality-specific arrivals) do not, since a weeks-worked floor
+mechanically penalizes people who just moved (a move-year employment gap is
+common) and distorts the mover/stayer counts nu is identified from. Branches
+(1) and (2) use raw INCWAGE as their wage measure; branch (3) uses an
+hours/weeks-adjusted hourly wage, CPI-U deflated to real 2009 dollars.
 
-Sample range is 2001-2024 (ACS's "residence 1 year ago" question, MIGPLAC1,
-isn't fielded before 2001; CPS is no longer needed to fill in 2023-2024 now
-that ACS itself covers them). One consequence of dropping the pre-2001
-extract entirely: the earliest flow-panel year shifts from 2001 to 2002,
-since a Year=2001 flow needs a Year=2000 origin-stock denominator that's no
-longer pulled.
+The earliest flow-panel year is 2002, since a Year=2001 flow needs a
+Year=2000 origin-stock denominator that this extract doesn't include.
 ================================================================*/
 
 frame create FlowPanel
@@ -37,21 +30,45 @@ frame create StockWagePanel
 frame create IndividualStateWagePanel
 frame create IndividualPanel
 frame create StatePersonPanel
+frame create NationalityFlowPanel
 
 forval yr = 2001/2024 {
 
     use "${Data}/acs/Acs`yr'.dta", clear
 
-    /*---------------- SHARED BASE RESTRICTIONS (identical to the old files) -------*/
+    /*---------------- SHARED BASE RESTRICTIONS (full-time, full-year) -------------*/
     drop if AGE < 16
     drop if UHRSWORK < 35
     drop if BPL >= 900
     gen Domestic = BPL < 100
     gen Foreign  = 1 - Domestic
 
-    * NOTE: STATEFIP is intentionally left numeric here -- MakeIndividualAnalysis.do
-    * (branch 2 below) always kept it numeric, while MakeAcsPi.do (branch 1) and the
-    * new state panel (branch 3) need it as a zero-padded string; each of those
+    * Unify weeks worked across ACS's WKSWORK1/WKSWORK2 coding change (WKSWORK1,
+    * continuous, fielded 2001-2007 and 2019+; WKSWORK2, categorical intervals,
+    * 2008-2018). WKSWORK2 categories mapped to interval midpoints: 1=1-13wks,
+    * 2=14-26, 3=27-39, 4=40-47, 5=48-49, 6=50-52.
+    capture confirm variable WKSWORK1
+    if !_rc gen Weeks = WKSWORK1
+    else    gen Weeks = .
+
+    capture confirm variable WKSWORK2
+    if !_rc {
+        replace Weeks = 7    if mi(Weeks) & WKSWORK2 == 1
+        replace Weeks = 20   if mi(Weeks) & WKSWORK2 == 2
+        replace Weeks = 33   if mi(Weeks) & WKSWORK2 == 3
+        replace Weeks = 43.5 if mi(Weeks) & WKSWORK2 == 4
+        replace Weeks = 48.5 if mi(Weeks) & WKSWORK2 == 5
+        replace Weeks = 51   if mi(Weeks) & WKSWORK2 == 6
+    }
+
+    * NOTE: the weeks-worked>=40 floor (full-time-full-year, on top of the
+    * UHRSWORK>=35 already imposed above) is applied LOCALLY within branches
+    * (2) and (3) below, not here -- branch (1) and the nationality-arrivals
+    * branch keep the lighter UHRSWORK>=35-only restriction (see header note).
+
+    * STATEFIP is intentionally left numeric here -- IndividualCpAnalysis.dta
+    * (branch 2 below) keeps it numeric, while AcsPiPanel.dta (branch 1) and the
+    * state panel (branch 3) need it as a zero-padded string; each of those
     * branches converts it locally, inside its own preserve block, so branch 2's
     * output isn't affected.
     replace INCWAGE = . if INCWAGE == 999999
@@ -59,8 +76,7 @@ forval yr = 2001/2024 {
     replace INCWAGE = incwage_censor if INCWAGE >= incwage_censor
 
     /*================================================================
-      BRANCH 1: MakeAcsPi.do's stock/wage cross-section and flow panel,
-      unchanged
+      BRANCH 1: stock/wage cross-section and migration-flow panel
     ================================================================*/
     preserve
         tostring STATEFIP, replace
@@ -110,11 +126,41 @@ forval yr = 2001/2024 {
         }
     restore
 
+    /*---------------- FOREIGN-BORN ARRIVALS BY NATIONALITY (BPL) -----------------*/
+    preserve
+        tostring STATEFIP, replace
+        replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
+
+        capture confirm variable MIGPLAC1
+        if !_rc {
+            keep if Foreign == 1
+
+            * "Arrived" = anything other than same-state (no move, or moved
+            * within the same state); origin can be another US state or
+            * abroad (MIGPLAC1>=100) -- both count as a new arrival to this
+            * state for this nationality group.
+            gen Origin = STATEFIP if MIGPLAC1 == 0
+            replace Origin = string(MIGPLAC1, "%02.0f") if mi(Origin)
+            drop if Origin == STATEFIP
+
+            keep PERWT STATEFIP YEAR BPL
+            ren STATEFIP Destination
+            ren YEAR Year
+
+            collapse (sum) PERWT, by(Destination Year BPL)
+            ren PERWT Inflow
+
+            frame NationalityFlowPanel: xframeappend default
+        }
+    restore
+
     /*================================================================
-      BRANCH 2: MakeIndividualAnalysis.do's state-year wage cross-section
-      and individual rows, unchanged
+      BRANCH 2: state-year wage cross-section and individual rows for the
+      choice-probability probit
     ================================================================*/
     preserve
+        drop if mi(Weeks) | Weeks < 40
+
         collapse (mean) Wage = INCWAGE [pw = PERWT], by(STATEFIP YEAR Domestic)
         reshape wide Wage, i(STATEFIP YEAR) j(Domestic)
         ren Wage0 Wage_Foreign
@@ -125,6 +171,8 @@ forval yr = 2001/2024 {
     restore
 
     preserve
+        drop if mi(Weeks) | Weeks < 40
+
         keep STATEFIP YEAR OCC1990 Foreign PERWT
         ren YEAR Year
 
@@ -132,35 +180,14 @@ forval yr = 2001/2024 {
     restore
 
     /*================================================================
-      BRANCH 3: NEW state-level wage/supply panel -- FTFY restriction and
-      hours/weeks-adjusted hourly wage
+      BRANCH 3: state-level wage/supply panel -- hours/weeks-adjusted
+      hourly wage, full-time-full-year (FTFY) sample
     ================================================================*/
     preserve
+        drop if mi(Weeks) | Weeks < 40
+
         tostring STATEFIP, replace
         replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
-
-        * Unify weeks worked across ACS's WKSWORK1/WKSWORK2 coding change
-        * (WKSWORK1, continuous, fielded 2001-2007 and 2019+; WKSWORK2,
-        * categorical intervals, 2008-2018). WKSWORK2 categories mapped to
-        * interval midpoints: 1=1-13wks, 2=14-26, 3=27-39, 4=40-47, 5=48-49,
-        * 6=50-52.
-        capture confirm variable WKSWORK1
-        if !_rc gen Weeks = WKSWORK1
-        else    gen Weeks = .
-
-        capture confirm variable WKSWORK2
-        if !_rc {
-            replace Weeks = 7    if mi(Weeks) & WKSWORK2 == 1
-            replace Weeks = 20   if mi(Weeks) & WKSWORK2 == 2
-            replace Weeks = 33   if mi(Weeks) & WKSWORK2 == 3
-            replace Weeks = 43.5 if mi(Weeks) & WKSWORK2 == 4
-            replace Weeks = 48.5 if mi(Weeks) & WKSWORK2 == 5
-            replace Weeks = 51   if mi(Weeks) & WKSWORK2 == 6
-        }
-
-        * Full-time, full-year (FTFY): UHRSWORK>=35 already imposed above;
-        * add the weeks-worked floor.
-        drop if mi(Weeks) | Weeks < 40
 
         gen HourlyWage = INCWAGE / (UHRSWORK * Weeks)
         drop if mi(HourlyWage) | HourlyWage <= 0
@@ -174,7 +201,7 @@ forval yr = 2001/2024 {
 }
 
 /*================================================================
-  BRANCH 1 OUTPUT: AcsPiPanel.dta (identical construction to MakeAcsPi.do)
+  BRANCH 1 OUTPUT: AcsPiPanel.dta
 ================================================================*/
 frame change StockWagePanel
 capture frame drop default
@@ -263,9 +290,38 @@ sort Origin Destination Year
 
 save "${Data}/AcsPiPanel.dta", replace
 
+* State-level gross in-migration (destination total across all origins,
+* domestic and foreign born separately), for the state panel below -- a
+* direct MIGPLAC1-based flow measure, rather than a first-difference of
+* stocks. Excludes Origin==Destination (non-movers/in-state movers), which
+* the bilateral panel above includes as a same-state "flow" for stay-rate
+* calculations elsewhere but which isn't a real migration flow here.
+preserve
+    drop if Origin == Destination
+    collapse (sum) Flow_Domestic Flow_Foreign, by(Destination Year)
+    ren Destination STATEFIP
+    ren Flow_Domestic Inflow_Domestic
+    ren Flow_Foreign  Inflow_Foreign
+    tempfile InflowFile
+    save `InflowFile'
+restore
+
+* Foreign-born arrivals by nationality (BPL), wide by BPL code -- one column
+* per country/region-of-birth code, e.g. Inflow200 for BPL==200 (Mexico).
+frame NationalityFlowPanel {
+    capture frame drop default
+    reshape wide Inflow, i(Destination Year) j(BPL)
+    ds Inflow*
+    foreach v of varlist `r(varlist)' {
+        replace `v' = 0 if mi(`v')
+    }
+    ren Destination STATEFIP
+}
+frame NationalityFlowPanel: tempfile NationalityInflowFile
+frame NationalityFlowPanel: save `NationalityInflowFile'
+
 /*================================================================
-  BRANCH 2 OUTPUT: IndividualCpAnalysis.dta (identical construction to
-  MakeIndividualAnalysis.do)
+  BRANCH 2 OUTPUT: IndividualCpAnalysis.dta
 ================================================================*/
 use "${PeriSparber}/Abilities_occ1990.dta", clear
 gen manual   = (1/19)*(im_a22+im_a23+im_a24+im_a25+im_a26+im_a27+im_a28+im_a29 ///
@@ -408,6 +464,16 @@ ren Supply1 Supply_Domestic
 
 merge 1:1 STATEFIP Year using `UnresidFile', nogen
 merge 1:1 STATEFIP Year using `ResidFile', nogen
+merge 1:1 STATEFIP Year using `InflowFile', nogen
+merge 1:1 STATEFIP Year using `NationalityInflowFile', nogen
+
+loc inflowdomfor "Inflow_Domestic Inflow_Foreign"
+ds Inflow*
+loc allinflowvars `r(varlist)'
+    loc bplinflowvars: list allinflowvars - inflowdomfor
+foreach v of local bplinflowvars {
+    replace `v' = 0 if mi(`v')
+}
 
 /*---------------- CPI-U DEFLATION (2009 base, matches rest of pipeline) */
 preserve
@@ -435,9 +501,20 @@ la var Wage_Domestic_Unresid "Domestic-born hourly wage, PERWT-weighted mean, re
 la var Wage_Foreign_Unresid  "Foreign-born hourly wage, PERWT-weighted mean, real 2009 USD (CPI-U deflated), FTFY sample"
 la var Wage_Domestic_Resid   "Domestic-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
 la var Wage_Foreign_Resid    "Foreign-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
+la var Inflow_Domestic       "Domestic-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, FTFY sample, interstate only); missing for Year=2001 (needs a Year=2000 origin stock not in this extract)"
+la var Inflow_Foreign        "Foreign-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, FTFY sample, interstate only -- excludes new arrivals from abroad, unlike the Inflow<BPL> columns below); missing for Year=2001"
+
+ds Inflow*
+loc allinflowvars `r(varlist)'
+    loc bplinflowvars: list allinflowvars - inflowdomfor
+foreach v of local bplinflowvars {
+    loc bplcode = substr("`v'", 7, .)
+    la var `v' "Foreign-born arrivals with BPL==`bplcode', realized in Year (ACS MIGPLAC1, FTFY sample; includes both interstate moves and new arrivals from abroad, unlike Inflow_Foreign above)"
+}
 
 order STATEFIP Year Supply_Domestic Supply_Foreign ///
-      Wage_Domestic_Unresid Wage_Foreign_Unresid Wage_Domestic_Resid Wage_Foreign_Resid
+      Wage_Domestic_Unresid Wage_Foreign_Unresid Wage_Domestic_Resid Wage_Foreign_Resid ///
+      Inflow_Domestic Inflow_Foreign
 sort STATEFIP Year
 
 save "${Data}/StateWageSupplyPanel.dta", replace

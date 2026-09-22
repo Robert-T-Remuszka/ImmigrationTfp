@@ -8,9 +8,9 @@ number of returning domestic-born natives, both observed in the ACS 2016
 wave reporting MIGPLAC1 >= 100 (living abroad in 2015 -- the same origin
 year as every other piece of this calibration).
 
-Same sample restrictions as MakeAcsPi.do (age 16+, full-time workers,
-BPL<900), but keeping exactly the rows that file drops: MIGPLAC1 >= 100 is
-the ROW-origin counterpart to that file's interstate-only panel.
+Same sample restrictions as AcsPiPanel.dta's construction (age 16+, full-time
+workers, BPL<900), but keeping exactly the rows that panel drops: MIGPLAC1
+>= 100 is the ROW-origin counterpart to its interstate-only panel.
 
 Input: data/acs/Acs2016.dta.
 Output: data/RowFlowCounts.dta, one row (immigration_count_2015,

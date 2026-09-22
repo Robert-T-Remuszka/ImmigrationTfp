@@ -3,7 +3,7 @@ do Globals
 
 /*================================================================
 Estimates the "Choice Probabilities" equation -- as an
-individual-level probit on MakeIndividualAnalysis.do's ACS 2000-2022 sample:
+individual-level probit on IndividualCpAnalysis.dta's ACS 2001-2024 sample:
 
     Pr(Foreign | tau, w) = Phi( b0 + b_w*w_tilde + b_tau*Phi^-1(tau) )
 
@@ -13,7 +13,7 @@ identifies (mu_z, xi_w, xi_z) directly off the probit's three coefficients
 w_tilde varies only at the state-year level (it's a market-clearing factor
 price in the model, not an individual object) while tau varies only at the
 occupation level -- both merged onto individual rows in
-MakeIndividualAnalysis.do. Clustering by STATEFIP accounts for w_tilde's
+IndividualCpAnalysis.dta. Clustering by STATEFIP accounts for w_tilde's
 coarser level of variation
 ================================================================*/
 

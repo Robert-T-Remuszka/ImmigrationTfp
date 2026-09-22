@@ -11,6 +11,12 @@ aggregates) from the model's factor-share condition,
     s^F_lt = w^F_lt*L^F_lt / (w^F_lt*L^F_lt + w^D_lt*L^D_lt) = lambda^(1-rho)*(L^F_lt/L_lt)^rho,
 (mu_z, xi_omega, xi_z) are fixed/known in advance from EstimateCp.do, so rho
 is the only parameter estimated here.
+
+Estimation uses StateWageSupplyPanel.dta (ACS 2001-2024, FTFY, unresidualized
+hourly wages). Both sides of the factor-share condition depend on wages only
+through the relative wage w=W^D/W^F (RHS, via I^F/I^D) and total labor income
+(LHS, w*L -- invariant to how it's split into price x quantity), so the
+choice between hourly and annual-equivalent wage units doesn't affect rho.
 =================================================================#
 
 # %% 1. Fixed parameters from the prior estimating equation
@@ -18,13 +24,14 @@ cp = load_cp_estimate()
 println("Fixed from EstimateCp.do: μ_z=", cp.μ_z, " ξ_ω=", cp.ξ_ω, " ξ_z=", cp.ξ_z)
 
 # %% 2. Load and clean the panel -- only wages and labor supplies, nothing else
-StateAnalysis = @chain DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta"))) begin
+StateAnalysis = @chain DataFrame(load(joinpath(data, "StateWageSupplyPanel.dta"))) begin
     @mutate(
         Supply_Foreign  = Float64.(Supply_Foreign),
         Supply_Domestic = Float64.(Supply_Domestic),
-        Wage_Domestic   = Float64.(Wage_Domestic),
-        Wage_Foreign    = Float64.(Wage_Foreign)
+        Wage_Domestic   = Float64.(Wage_Domestic_Unresid),
+        Wage_Foreign    = Float64.(Wage_Foreign_Unresid)
     )
+    @rename(statefip = STATEFIP, year = Year)
 end
 
 LF = StateAnalysis.Supply_Foreign
@@ -123,8 +130,15 @@ jldsave(joinpath(@__DIR__, "AggSupply.jld2"); p_star)
 println()
 println("Saved p_star = ", p_star, " to AggSupply.jld2")
 
-# %% 9. Compute-and-export Z, L, λ (handed to MakeStateAnalysis.do -> MakeIRF.do)
+# %% 9. Attach Z, L, λ (already computed in the diagnostics step above, at ρ̂)
+# directly onto the estimation panel itself and export under its own name --
+# a single self-contained ACS 2001-2024 panel (wages, supply, and task
+# aggregates together), not routed through the legacy
+# StateAnalysisPreTfp.dta/MakeStateAnalysis.do chain. Not yet wired into
+# MakeIRF.do or any other downstream step.
 out = DataFrame(statefip = StateAnalysis.statefip, year = StateAnalysis.year,
+                 Supply_Domestic = LD, Supply_Foreign = LF,
+                 Wage_Domestic = wD, Wage_Foreign = wF,
                  Z = Z, L = L, lambda = λ)
-CSV.write(joinpath(data, "StateTfpAndTaskAgg.csv"), out)
-println("Wrote ", nrow(out), " rows to ", joinpath(data, "StateTfpAndTaskAgg.csv"))
+CSV.write(joinpath(data, "StateAggSupplyAcs.csv"), out)
+println("Wrote ", nrow(out), " rows to ", joinpath(data, "StateAggSupplyAcs.csv"))

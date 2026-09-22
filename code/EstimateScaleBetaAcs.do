@@ -2,16 +2,13 @@ clear all
 do Globals
 
 /*================================================================
-ACS-based build of eq. (27):
+ACS-based estimate of the migration scale parameters (nu^D, nu^F):
 β=0.96 calibrated, single endogenous regressor = wage ratio at t+1,
 instrumented with the t-dated wage ratio and the t-1-dated flow-ratio
-term, route-specic FE absorbed. Input panel is ACS's AcsPiPanel.dta (built by
-MakeAcsPi.do)
+term, route-specific FE absorbed. Input panel is AcsPiPanel.dta.
 
-DECISION (2026-08-21): The
-endog() test below does NOT reject OLS==IV on either nativity. We're 
-using the OLS estimate as the baseline value going forward (ν^D ≈ 2.6, ν^F ≈ 2.8), 
-reporting the DWH test alongside it.
+The endog() test below does not reject OLS==IV on either nativity, so the
+OLS estimate is used as the baseline, with the DWH test reported alongside.
 ================================================================*/
 
 loc bta = 0.96   // calibrated, matches Parameters()'s β default (annual equivalent of CDP's quarterly 0.99)
