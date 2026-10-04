@@ -9,11 +9,14 @@ Loops once over data/acs/Acs2001.dta-Acs2024.dta to build three files:
      probability probit; feeds EstimateCp.do
   3. StateWageSupplyPanel.dta -- state x year x nativity labor supply,
      hourly wages (unresidualized and composition-adjusted/residualized),
-     gross in-migration (from MIGPLAC1, aggregated across all US origins),
-     and, by nationality (BPL): current-period arrivals (Inflow<code>) and
-     stock (Stock<code>) -- the numerator and denominator for a shift-share
-     instrument's growth-rate term. Not currently read by any other step in
-     this pipeline.
+     gross in-migration from MIGPLAC1 (Inflow_Domestic is interstate-only;
+     Inflow_Foreign also includes new arrivals from abroad, being the sum of
+     the per-nationality Inflow<code> columns below), and, by nationality
+     (BPL): current-period arrivals (Inflow<code>) and stock (Stock<code>)
+     -- the numerator and denominator for a shift-share instrument's
+     growth-rate term -- plus the subset of arrivals coming from abroad only
+     (NewArr<code>, and NewArr_Foreign as their state total), which excludes
+     foreign-born movers between US states. Feeds MakeLpivPanel.do.
 
 All branches share UHRSWORK>=35. The individual-level probit file (2) and
 the state wage/supply panel (3) additionally require a full-time-full-year
@@ -35,6 +38,7 @@ frame create IndividualPanel
 frame create StatePersonPanel
 frame create NationalityFlowPanel
 frame create NationalityStockPanel
+frame create NewArrivalsPanel
 
 forval yr = 2001/2024 {
 
@@ -155,6 +159,29 @@ forval yr = 2001/2024 {
             ren PERWT Inflow
 
             frame NationalityFlowPanel: xframeappend default
+        }
+    restore
+
+    /*---------------- NEW FOREIGN-BORN ARRIVALS FROM ABROAD, BY NATIONALITY ------*/
+    * Same as the arrivals branch above but restricted to MIGPLAC1>=100 (residence
+    * one year ago was outside the US), so interstate moves of the foreign born
+    * are excluded.
+    preserve
+        tostring STATEFIP, replace
+        replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
+
+        capture confirm variable MIGPLAC1
+        if !_rc {
+            keep if Foreign == 1 & MIGPLAC1 >= 100
+
+            keep PERWT STATEFIP YEAR BPL
+            ren STATEFIP Destination
+            ren YEAR Year
+
+            collapse (sum) PERWT, by(Destination Year BPL)
+            ren PERWT NewArr
+
+            frame NewArrivalsPanel: xframeappend default
         }
     restore
 
@@ -315,16 +342,19 @@ save "${Data}/AcsPiPanel.dta", replace
 * calculations elsewhere but which isn't a real migration flow here.
 preserve
     drop if Origin == Destination
-    collapse (sum) Flow_Domestic Flow_Foreign, by(Destination Year)
+    collapse (sum) Flow_Domestic, by(Destination Year)
     ren Destination STATEFIP
     ren Flow_Domestic Inflow_Domestic
-    ren Flow_Foreign  Inflow_Foreign
     tempfile InflowFile
     save `InflowFile'
 restore
 
 * Foreign-born arrivals by nationality (BPL), wide by BPL code -- one column
 * per country/region-of-birth code, e.g. Inflow200 for BPL==200 (Mexico).
+* Inflow_Foreign (the state-level total) is built here, as the sum across all
+* BPL codes, rather than from the interstate-only FlowPanel above -- it needs
+* to include arrivals from abroad, which is exactly what this branch's own
+* per-BPL columns already capture and FlowPanel's Flow_Foreign does not.
 frame NationalityFlowPanel {
     capture frame drop default
     reshape wide Inflow, i(Destination Year) j(BPL)
@@ -332,10 +362,25 @@ frame NationalityFlowPanel {
     foreach v of varlist `r(varlist)' {
         replace `v' = 0 if mi(`v')
     }
+    egen double Inflow_Foreign = rowtotal(Inflow*)
     ren Destination STATEFIP
 }
 frame NationalityFlowPanel: tempfile NationalityInflowFile
 frame NationalityFlowPanel: save `NationalityInflowFile'
+
+* Arrivals from abroad only, wide by BPL code (NewArr200 for Mexico, etc.);
+* NewArr_Foreign is the state total across BPL codes.
+frame NewArrivalsPanel {
+    reshape wide NewArr, i(Destination Year) j(BPL)
+    ds NewArr*
+    foreach v of varlist `r(varlist)' {
+        replace `v' = 0 if mi(`v')
+    }
+    egen double NewArr_Foreign = rowtotal(NewArr*)
+    ren Destination STATEFIP
+}
+frame NewArrivalsPanel: tempfile NewArrivalsFile
+frame NewArrivalsPanel: save `NewArrivalsFile'
 
 * Foreign-born stock by nationality (BPL), wide by BPL code -- one column
 * per country/region-of-birth code, e.g. Stock200 for BPL==200 (Mexico).
@@ -501,6 +546,12 @@ merge 1:1 STATEFIP Year using `ResidFile', nogen
 merge 1:1 STATEFIP Year using `InflowFile', nogen
 merge 1:1 STATEFIP Year using `NationalityInflowFile', nogen
 merge 1:1 STATEFIP Year using `NationalityStockFile', nogen
+merge 1:1 STATEFIP Year using `NewArrivalsFile', nogen
+
+ds NewArr*
+foreach v of varlist `r(varlist)' {
+    replace `v' = 0 if mi(`v')
+}
 
 loc inflowdomfor "Inflow_Domestic Inflow_Foreign"
 ds Inflow*
@@ -542,14 +593,24 @@ la var Wage_Foreign_Unresid  "Foreign-born hourly wage, PERWT-weighted mean, rea
 la var Wage_Domestic_Resid   "Domestic-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
 la var Wage_Foreign_Resid    "Foreign-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
 la var Inflow_Domestic       "Domestic-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor, interstate only); missing for Year=2001 (needs a Year=2000 origin stock not in this extract)"
-la var Inflow_Foreign        "Foreign-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor, interstate only -- excludes new arrivals from abroad, unlike the Inflow<BPL> columns below); missing for Year=2001"
+la var Inflow_Foreign        "Foreign-born gross in-migration, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor; sum of the Inflow<BPL> columns below, so includes both interstate moves and new arrivals from abroad)"
 
 ds Inflow*
 loc allinflowvars `r(varlist)'
 loc bplinflowvars: list allinflowvars - inflowdomfor
 foreach v of local bplinflowvars {
     loc bplcode = substr("`v'", 7, .)
-    la var `v' "Foreign-born arrivals with BPL==`bplcode', realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor; includes both interstate moves and new arrivals from abroad, unlike Inflow_Foreign above)"
+    la var `v' "Foreign-born arrivals with BPL==`bplcode', realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor; includes both interstate moves and new arrivals from abroad; Inflow_Foreign above is the sum of these)"
+}
+
+la var NewArr_Foreign "Foreign-born arrivals from abroad only (MIGPLAC1>=100), realized in Year (ACS, UHRSWORK>=35 sample, no FTFY floor); sum of the NewArr<BPL> columns, excludes foreign-born interstate movers"
+ds NewArr*
+loc allnewvars `r(varlist)'
+loc newarrtot "NewArr_Foreign"
+loc bplnewvars: list allnewvars - newarrtot
+foreach v of local bplnewvars {
+    loc bplcode = substr("`v'", 7, .)
+    la var `v' "Foreign-born arrivals from abroad only (MIGPLAC1>=100) with BPL==`bplcode', realized in Year (ACS, UHRSWORK>=35 sample, no FTFY floor)"
 }
 
 ds Stock*
