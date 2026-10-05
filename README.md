@@ -33,10 +33,11 @@ The data come from several sources. In order to download the data and replicate 
 **Remark on Raw Data:** It is not advised that you run the raw data extract codes above since all the extract output is already included in the shared data file. The extract codes are only included so that the user can see how these extracts were generated. If you would like to execute the extract codes, you will need to create a python script called ```Credentials.py``` and create a dictionary consistent with the key references in the raw download data. To do that, you will need your own API keys to the referenced APIs above. If, for some reason you find yourself running the extract code more than once, be sure to remove the previously extracted files from the location where they were saved.
 
 # Run Order
-The pipeline runs in four phases: (1) build the state panel and estimate the
+The pipeline runs in five phases: (1) build the state panel and estimate the
 production/task-allocation parameters directly from data, (2) build the
 Rest-of-World data, (3) solve the non-stochastic steady state and
-calibrate the ROW linkage parameters, (4) build tables.
+calibrate the ROW linkage parameters, (4) estimate the local-projection
+evidence, (5) build tables and figures.
 
 ## Step 1: State Panel and Directly-Estimated Parameters
 1. [**Clean the Pre-Period Data**](code/CleanPrePeriod.do)
@@ -50,8 +51,9 @@ calibrate the ROW linkage parameters, (4) build tables.
    and the state-level wage/supply panel. The state panel applies a full-time-full-year restriction
    (`UHRSWORK>=35` and weeks worked >=40) and reports hourly wages by state x year x nativity, both
    unresidualized and composition-adjusted (residualized on age, age^2, education, sex, race with year fixed
-   effects), CPI-U deflated to real 2009 dollars. `StateWageSupplyPanel.dta` is not currently read by any other
-   step in this pipeline.
+   effects, estimated separately by nativity and evaluated at each nativity's own mean characteristics), CPI-U
+   deflated to real 2009 dollars. `StateWageSupplyPanel.dta` feeds the EOS estimation (item 7) and the
+   local-projection panel (Step 4).
     * Output(s): ```data/AcsPiPanel.dta```, ```data/IndividualCpAnalysis.dta```, ```data/StateWageSupplyPanel.dta```
 4. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
     * Output(s): ```data/StateAnalysisPreTfp.dta```
@@ -63,15 +65,13 @@ calibrate the ROW linkage parameters, (4) build tables.
     * Output(s): ```data/CpEstimates.dta```
 7. [**Estimate EOS**](code/AggSupply_Estimate.jl) (ρ, via the factor-share condition)
     * [Associated Types and Functions](code/AggSupply_Functions.jl)
-    * Input(s): ```data/CpEstimates.dta```, ```data/StateAnalysisPreTfp.dta```
-    * Output(s): ```data/StateTfpAndTaskAgg.csv```, ```AggSupply.jld2```
-8. [**Calibrate State Capital Shares**](code/CalibrateTheta.do) (θ_l, δ_l)
+    * Input(s): ```data/CpEstimates.dta```, ```data/StateWageSupplyPanel.dta```
+    * Output(s): ```data/StateAggSupplyAcs.csv``` (Z, L, λ by state x year), ```AggSupply.jld2```
+8. [**Calibrate the Capital Share and Depreciation Rate**](code/CalibrateTheta.do) (θ, δ) -- one national value of
+   each, from 2015 national aggregates; the output file repeats the same two numbers on every state row.
     * Input(s): ```data/CapByState/state_capital_yesdata21.dta```, ```data/StateAnalysisPreTfp.dta```
     * Output(s): ```data/ThetaDelta.dta```
-9. [**Merge in Production Function Outputs**](code/MakeStateAnalysis.do)
-    * Input(s): ```data/StateTfpAndTaskAgg.csv```
-    * Output(s): ```data/StateAnalysis.dta```
-10. [**Estimate Interior Bilateral Migration Costs**](code/EstimateBilateralCosts.do) (f^n_ll' for l, l' both US states)
+9. [**Estimate Interior Bilateral Migration Costs**](code/EstimateBilateralCosts.do) (f^n_ll' for l, l' both US states)
     * Input(s): ```data/AcsPiPanel.dta```
     * Output(s): ```data/BilateralCosts2015.dta```, ```data/AggMigrationRateByYear.dta```
 
@@ -100,7 +100,26 @@ the US to ROW aren't observed in the ACS/CPS.
     * Input(s): ```data/RowIncomeConstants.dta```, ```data/PopulationConstants.dta```, ```data/RowFlowCounts.dta```, ```data/StateAnalysisPreTfp.dta```, plus everything `SsSolve_Functions.jl` needs
     * Output(s): ```code/RowCosts.jld2```
 
-## Step 4: Tables and Other Output
+## Step 4: Local-Projections
+1. [**Build Pre-period Enclave Counts**](code/MakeEnclaves.do) (state x birthplace and state x ancestry, 1960-2000 decennial censuses)
+    * Input(s): ```data/census-enclaves/Census1960.dta```-```Census2000.dta```
+    * Output(s): ```data/EnclaveSharesBpl.dta```, ```data/EnclaveSharesAncestry.dta```
+2. [**Build the Local-Projection Analysis Panel**](code/MakeLpivPanel.do) -- state x year outcomes (Z, L, wages), the foreign-born
+   inflow rate, and the shift-share instruments (1990 and 2000 enclave shares; all arrivals, arrivals from abroad only,
+   and leave-one-out versions).
+    * Input(s): ```data/StateAggSupplyAcs.csv```, ```data/StateWageSupplyPanel.dta```, ```data/EnclaveSharesBpl.dta```
+    * Output(s): ```data/StateAnalysisPanel.dta```
+3. [**Estimate Local Projections**](code/MakeIrf.do) -- first stage, lag-exogeneity test, and the baseline LP-IV
+   (inflow rate instrumented by the 1990-share, leave-one-out, abroad-only instrument; five lags of the inflow rate and
+   year fixed effects as controls; DC excluded; standard errors clustered by state).
+    * Input(s): ```data/StateAnalysisPanel.dta```
+    * Output(s): ```output/tables/Lag_exog.tex```, ```output/graphs/LpivBaseline_1990.pdf```
+
+## Step 5: Tables and Figures
 1. [**Build Parameter Table**](code/MakeTables.jl)
     * Input(s): ```data/CpEstimates.dta```, ```AggSupply.jld2```, ```data/NuBetaEstimatesAcs.dta```, ```code/RowCosts.jld2```
     * Output(s): ```output/tables/ParameterEstimates.tex```
+2. [**Task-Specialization Illustration**](code/MakeDecompFig.jl) -- relative wage, productivity and the foreign task share
+   at the estimated parameters, with the observed range of relative wages shaded.
+    * Input(s): ```data/CpEstimates.dta```, ```AggSupply.jld2```, ```data/StateAnalysisPanel.dta```
+    * Output(s): ```output/graphs/TaskSpecializationIllustration.pdf```
