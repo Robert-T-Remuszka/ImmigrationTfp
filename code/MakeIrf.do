@@ -113,7 +113,7 @@ foreach baseyear in 1990 {
         gen first_stage_F = .
     }
 
-    foreach v of varlist Z L Wage_Domestic_Unresid Wage_Foreign_Unresid {
+    foreach v of varlist Z L Wage_Domestic_Resid Wage_Foreign_Resid {
         
         forval h = 0/`horizon' {
 
@@ -144,7 +144,7 @@ foreach baseyear in 1990 {
 
         loc plots ""
         loc i = 1
-        foreach v in Z L Wage_Domestic_Unresid Wage_Foreign_Unresid {
+        foreach v in Z L Wage_Domestic_Resid Wage_Foreign_Resid {
 
             loc ytitle: word `i' of `ytitles'
 

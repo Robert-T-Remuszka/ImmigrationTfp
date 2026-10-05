@@ -3,10 +3,11 @@ do Globals
 
 /*================================================================
 Loops once over data/acs/Acs2001.dta-Acs2024.dta to build three files:
-  1. AcsPiPanel.dta          -- state stock/wage/migration-flow panel; feeds
+  1. AcsPiPanel.dta          -- state stock/migration-flow panel; feeds
      EstimateScaleBetaAcs.do's nu^D/nu^F and EstimateBilateralCosts.do's f^n_ll'
   2. IndividualCpAnalysis.dta -- individual-level file for the choice-
-     probability probit; feeds EstimateCp.do
+     probability probit (its state-year relative wage is the ratio of file
+     3's composition-adjusted wages); feeds EstimateCp.do
   3. StateWageSupplyPanel.dta -- state x year x nativity labor supply,
      hourly wages (unresidualized and composition-adjusted/residualized),
      gross in-migration from MIGPLAC1 (Inflow_Domestic is interstate-only;
@@ -23,9 +24,10 @@ the state wage/supply panel (3) additionally require a full-time-full-year
 (FTFY) restriction (weeks worked>=40); the migration-flow branches (1, and
 the nationality-specific arrivals) do not, since a weeks-worked floor
 mechanically penalizes people who just moved (a move-year employment gap is
-common) and distorts the mover/stayer counts nu is identified from. Branches
-(1) and (2) use raw INCWAGE as their wage measure; branch (3) uses an
-hours/weeks-adjusted hourly wage, CPI-U deflated to real 2009 dollars.
+common) and distorts the mover/stayer counts nu is identified from. Branch
+(3) builds the only wage measure, an hours/weeks-adjusted hourly wage, CPI-U
+deflated to real 2009 dollars; branch (2) takes its relative wage from it,
+and branch (1) carries no wages.
 
 The earliest flow-panel year is 2002, since a Year=2001 flow needs a
 Year=2000 origin-stock denominator that this extract doesn't include.
@@ -33,7 +35,6 @@ Year=2000 origin-stock denominator that this extract doesn't include.
 
 frame create FlowPanel
 frame create StockWagePanel
-frame create IndividualStateWagePanel
 frame create IndividualPanel
 frame create StatePersonPanel
 frame create NationalityFlowPanel
@@ -84,17 +85,14 @@ forval yr = 2001/2024 {
     replace INCWAGE = incwage_censor if INCWAGE >= incwage_censor
 
     /*================================================================
-      BRANCH 1: stock/wage cross-section and migration-flow panel
+      BRANCH 1: stock cross-section and migration-flow panel
     ================================================================*/
     preserve
         tostring STATEFIP, replace
         replace STATEFIP = "0" + STATEFIP if strlen(STATEFIP) == 1
 
-        collapse (mean) Wage = INCWAGE (rawsum) Stock = PERWT [pw = PERWT], ///
-            by(STATEFIP YEAR Domestic)
-        reshape wide Wage Stock, i(STATEFIP YEAR) j(Domestic)
-        ren Wage0  Wage_Foreign
-        ren Wage1  Wage_Domestic
+        collapse (rawsum) Stock = PERWT, by(STATEFIP YEAR Domestic)
+        reshape wide Stock, i(STATEFIP YEAR) j(Domestic)
         ren Stock0 Stock_Foreign
         ren Stock1 Stock_Domestic
         ren STATEFIP State
@@ -199,21 +197,8 @@ forval yr = 2001/2024 {
     restore
 
     /*================================================================
-      BRANCH 2: state-year wage cross-section and individual rows for the
-      choice-probability probit
+      BRANCH 2: individual rows for the choice-probability probit
     ================================================================*/
-    preserve
-        drop if mi(Weeks) | Weeks < 40
-
-        collapse (mean) Wage = INCWAGE [pw = PERWT], by(STATEFIP YEAR Domestic)
-        reshape wide Wage, i(STATEFIP YEAR) j(Domestic)
-        ren Wage0 Wage_Foreign
-        ren Wage1 Wage_Domestic
-        ren YEAR Year
-
-        frame IndividualStateWagePanel: xframeappend default
-    restore
-
     preserve
         drop if mi(Weeks) | Weeks < 40
 
@@ -236,7 +221,7 @@ forval yr = 2001/2024 {
         gen HourlyWage = INCWAGE / (UHRSWORK * Weeks)
         drop if mi(HourlyWage) | HourlyWage <= 0
 
-        keep STATEFIP YEAR Domestic PERWT HourlyWage AGE EDUC SEX RACE
+        keep STATEFIP YEAR Domestic PERWT HourlyWage AGE EDUC SEX RACE BPL
         ren YEAR Year
 
         frame StatePersonPanel: xframeappend default
@@ -284,29 +269,15 @@ merge m:1 Origin Year using `OriginStockLead', keep(1 3) nogen
 
 preserve
     use `StockWageFile', clear
-    keep State Year Wage_Domestic Wage_Foreign
-    ren State Origin
-    ren Wage_Domestic Wage_Domestic_Origin
-    ren Wage_Foreign  Wage_Foreign_Origin
-    tempfile OriginWage
-    save `OriginWage'
-restore
-
-merge m:1 Origin Year using `OriginWage', keep(1 3) nogen
-
-preserve
-    use `StockWageFile', clear
-    keep State Year Wage_Domestic Wage_Foreign Stock_Domestic Stock_Foreign
+    keep State Year Stock_Domestic Stock_Foreign
     ren State Destination
-    ren Wage_Domestic Wage_Domestic_Dest
-    ren Wage_Foreign  Wage_Foreign_Dest
     ren Stock_Domestic Supply_Domestic_Dest
     ren Stock_Foreign  Supply_Foreign_Dest
-    tempfile DestWage
-    save `DestWage'
+    tempfile DestStock
+    save `DestStock'
 restore
 
-merge m:1 Destination Year using `DestWage', keep(1 3) nogen
+merge m:1 Destination Year using `DestStock', keep(1 3) nogen
 
 la var Origin                    "Origin state (l), FIPS"
 la var Destination                "Destination state (l'), FIPS"
@@ -320,16 +291,11 @@ la var Supply_Domestic_Origin_lead "Origin domestic-born labor stock at t+1 (ACS
 la var Supply_Foreign_Origin_lead  "Origin foreign-born labor stock at t+1 (ACS)"
 la var Supply_Domestic_Dest        "Destination domestic-born labor stock at t+1 (ACS)"
 la var Supply_Foreign_Dest         "Destination foreign-born labor stock at t+1 (ACS)"
-la var Wage_Domestic_Origin        "Origin domestic-born mean wage at t+1 (ACS, nominal)"
-la var Wage_Foreign_Origin         "Origin foreign-born mean wage at t+1 (ACS, nominal)"
-la var Wage_Domestic_Dest          "Destination domestic-born mean wage at t+1 (ACS, nominal)"
-la var Wage_Foreign_Dest           "Destination foreign-born mean wage at t+1 (ACS, nominal)"
 
 order Origin Destination Year t Flow_Domestic Flow_Foreign ///
       Supply_Domestic_Origin Supply_Foreign_Origin ///
       Supply_Domestic_Origin_lead Supply_Foreign_Origin_lead ///
-      Supply_Domestic_Dest Supply_Foreign_Dest ///
-      Wage_Domestic_Origin Wage_Foreign_Origin Wage_Domestic_Dest Wage_Foreign_Dest
+      Supply_Domestic_Dest Supply_Foreign_Dest
 sort Origin Destination Year
 
 save "${Data}/AcsPiPanel.dta", replace
@@ -400,87 +366,21 @@ frame NationalityStockPanel: tempfile NationalityStockFile
 frame NationalityStockPanel: save `NationalityStockFile'
 
 /*================================================================
-  BRANCH 2 OUTPUT: IndividualCpAnalysis.dta
-================================================================*/
-use "${PeriSparber}/Abilities_occ1990.dta", clear
-gen manual   = (1/19)*(im_a22+im_a23+im_a24+im_a25+im_a26+im_a27+im_a28+im_a29 ///
-                       +im_a30+im_a31+im_a32+im_a33+im_a34+im_a35+im_a36+im_a37 ///
-                       +im_a38+im_a39+im_a40)
-gen language = (1/4)*(im_a1+im_a2+im_a3+im_a4)
-gen cm_ratio = language / manual
-keep occ1990 manual language cm_ratio
-ren occ1990 OCC1990
-la var cm_ratio "Peri-Sparber basic communication/manual ratio (language/manual), from their own ICPSR replication code"
-tempfile TaskAbility
-save `TaskAbility'
-
-frame IndividualStateWagePanel {
-    capture frame drop default
-    gen w_tilde = ln(Wage_Domestic / Wage_Foreign)
-    la var w_tilde "ln(Wage_Domestic/Wage_Foreign), state-year, ACS, PERWT-weighted mean, top-1%-by-state winsorized (NOT composition-adjusted yet)"
-    keep STATEFIP Year w_tilde
-}
-frame IndividualStateWagePanel: tempfile StateWageFile
-frame IndividualStateWagePanel: save `StateWageFile'
-
-frame change IndividualPanel
-capture frame drop default
-
-merge m:1 STATEFIP Year using `StateWageFile', keep(1 3) nogen
-merge m:1 OCC1990 using `TaskAbility', keep(1 3)
-di as text "--- OCC1990 merge with Peri-Sparber's occupation-ability index ---"
-tab _merge
-count if _merge == 1
-drop if _merge == 1
-drop _merge
-
-preserve
-    collapse (rawsum) TotalEmp = PERWT (mean) cm_ratio, by(OCC1990)
-    gsort cm_ratio
-    gen CumEmp = sum(TotalEmp)
-    qui summ CumEmp, meanonly
-    loc grand = r(max)
-    gen tau = (CumEmp - 0.5*TotalEmp) / `grand'
-    gen phi_inv_tau = invnormal(tau)
-    la var tau         "Employment-weighted percentile rank of Peri-Sparber's c/m ratio across occ1990 categories, pooled over all sample years"
-    la var phi_inv_tau "Phi^-1(tau) -- the model's task-index regressor"
-    keep OCC1990 tau phi_inv_tau cm_ratio TotalEmp
-    tempfile TauLookup
-    save `TauLookup'
-restore
-
-merge m:1 OCC1990 using `TauLookup', keep(1 3) nogen
-
-drop manual language
-
-la var STATEFIP    "State FIPS code"
-la var Year        "Survey year"
-la var OCC1990     "IPUMS occupation, 1990 basis"
-la var Foreign     "1 = foreign-born (BPL>=100), 0 = domestic-born -- the probit outcome, Pr(Foreign)=phi(tau)"
-la var PERWT       "ACS person weight"
-
-order STATEFIP Year OCC1990 Foreign PERWT w_tilde tau phi_inv_tau cm_ratio TotalEmp
-sort STATEFIP Year OCC1990
-
-count
-tab Foreign
-summ w_tilde tau phi_inv_tau cm_ratio
-
-save "${Data}/IndividualCpAnalysis.dta", replace
-di as text "Wrote ${Data}/IndividualCpAnalysis.dta"
-
-/*================================================================
   BRANCH 3 OUTPUT: StateWageSupplyPanel.dta -- unresidualized and residualized
   hourly wages by state x year x nativity
 
-  Residualized wage: ln(HourlyWage) ~ AGE + AGE^2 + i.EDUC + i.SEX + i.RACE,
-  year fixed effects only (not state x year -- returns to demographics are
-  assumed common across states, so beta is identified off pooled/between-
-  state variation and the composition-adjusted state-year level is
-  recovered by collapsing the residual, not by saturating with state x year
-  dummies), estimated SEPARATELY by nativity (Domestic, Foreign) since
-  returns to age/education plausibly differ by nativity and pooling them
-  would let compositional differences contaminate the residual.
+  Residualized wage: one pooled regression,
+    ln(HourlyWage) ~ AGE + AGE^2 + i.EDUC + i.SEX + i.RACE + year FE + birthplace FE,
+  where the birthplace categories are domestic-born plus the world regions
+  the shift-share instrument is built from (same BPL grouping as
+  MakeLpivPanel.do). The composition-adjusted log wage is year FE +
+  birthplace FE + individual residual, plus the sample-mean contribution of
+  the demographic controls (one constant, common to everyone, so wages stay
+  in dollars at average characteristics). Returns to demographics are common
+  across nativities and states, so the domestic/foreign ratio of the
+  collapsed series compares workers at the same characteristics. Each
+  person's adjusted wage is exponentiated before averaging: the state x year
+  x nativity series is a mean of wage levels, like the unresidualized one.
 ================================================================*/
 frame change StatePersonPanel
 capture frame drop default
@@ -488,29 +388,44 @@ capture frame drop default
 gen lnHourlyWage = ln(HourlyWage)
 gen AGE2 = AGE^2
 
-gen AdjLnWage = .
+* Birthplace category: 0 = domestic-born, 1-12 = world regions, 13 = any
+* foreign BPL code outside those regions.
+loc region_1  "200"
+loc region_2  "210 250 260 299"
+loc region_3  "300"
+loc region_4  "150 700 710 100 105 110 115 160 199"
+loc region_5  "400 401 402 404 405 410 411 412 413 414 420 421 425 426 429"
+loc region_6  "430 433 434 436 438"
+loc region_7  "450 451 452 453 454 455 456 457 460 461 462 465 499"
+loc region_8  "500 501 502 509"
+loc region_9  "511 512 513 514 515 516 517 518 519"
+loc region_10 "520 521 522 524"
+loc region_11 "531 532 534 535 536 537 540 541 542 543 544 548 549 599"
+loc region_12 "600"
 
-* By linearity, the PERWT-weighted mean of X_i'beta-hat across individuals
-* equals Xbar'beta-hat (the fitted value AT reference/mean demographics) --
-* no need for a synthetic reference observation or margins call.
-qui levelsof Domestic, local(nativities)
-foreach n of local nativities {
-    qui reghdfe lnHourlyWage AGE AGE2 i.EDUC i.SEX i.RACE if Domestic == `n' [pw = PERWT], absorb(Year) resid
-    predict double xb_`n'  if e(sample), xb
-    predict double d_`n'   if e(sample), d
-    predict double res_`n' if e(sample), residuals
-
-    qui summ xb_`n' [aw = PERWT] if Domestic == `n', meanonly
-    loc xbbar = r(mean)
-
-    * Adjusted log wage = Xbar'beta-hat (reference demographics, nativity-
-    * specific, fixed across the whole panel) + year FE + individual
-    * residual -- the year FE (not state x year) is the only nationally
-    * common component, so all remaining state-to-state variation in the
-    * collapsed series comes through the residual, exactly as intended.
-    replace AdjLnWage = `xbbar' + d_`n' + res_`n' if Domestic == `n' & e(sample)
-    drop xb_`n' d_`n' res_`n'
+gen byte BplRegion = cond(Domestic == 1, 0, 13)
+forval r = 1/12 {
+    foreach code of local region_`r' {
+        qui replace BplRegion = `r' if BPL == `code'
+    }
 }
+la def BplRegion 0 "Domestic" 1 "Mexico" 2 "CentAmCarib" 3 "SouthAmerica" 4 "CanadaOceania" 5 "NWEurope" ///
+                 6 "SEurope" 7 "EEurope" 8 "EAsia" 9 "SEAsia" 10 "SAsia" 11 "MidEast" 12 "Africa" 13 "Other"
+la val BplRegion BplRegion
+
+reghdfe lnHourlyWage AGE AGE2 i.EDUC i.SEX i.RACE [pw = PERWT], absorb(Year BplRegion) resid
+predict double xb  if e(sample), xb
+predict double d   if e(sample), d
+predict double res if e(sample), residuals
+
+qui summ xb [aw = PERWT], meanonly
+gen double AdjLnWage = r(mean) + d + res
+drop xb d res
+
+gen double AdjWageLevel = exp(AdjLnWage)
+tabstat HourlyWage AdjWageLevel [aw = PERWT], by(Domestic)
+tabstat HourlyWage AdjWageLevel [aw = PERWT], by(BplRegion)
+drop AdjWageLevel
 
 /*---------------- UNRESIDUALIZED SERIES ------------------------------*/
 preserve
@@ -525,9 +440,8 @@ restore
 /*---------------- RESIDUALIZED SERIES ---------------------------------*/
 preserve
     drop if mi(AdjLnWage)
-    collapse (mean) AdjLnWage [pw = PERWT], by(STATEFIP Year Domestic)
-    gen AdjWage = exp(AdjLnWage)
-    drop AdjLnWage
+    gen double AdjWage = exp(AdjLnWage)
+    collapse (mean) AdjWage [pw = PERWT], by(STATEFIP Year Domestic)
     reshape wide AdjWage, i(STATEFIP Year) j(Domestic)
     ren AdjWage0 Wage_Foreign_Resid
     ren AdjWage1 Wage_Domestic_Resid
@@ -590,8 +504,8 @@ la var Supply_Domestic       "Domestic-born FTFY labor supply (person-weighted h
 la var Supply_Foreign        "Foreign-born FTFY labor supply (person-weighted headcount)"
 la var Wage_Domestic_Unresid "Domestic-born hourly wage, PERWT-weighted mean, real 2009 USD (CPI-U deflated), FTFY sample"
 la var Wage_Foreign_Unresid  "Foreign-born hourly wage, PERWT-weighted mean, real 2009 USD (CPI-U deflated), FTFY sample"
-la var Wage_Domestic_Resid   "Domestic-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
-la var Wage_Foreign_Resid    "Foreign-born hourly wage, composition-adjusted (age/age2/educ/sex/race, year FE), real 2009 USD, FTFY sample"
+la var Wage_Domestic_Resid   "Domestic-born hourly wage, composition-adjusted (pooled regression on age/age2/educ/sex/race), real 2009 USD, FTFY sample"
+la var Wage_Foreign_Resid    "Foreign-born hourly wage, composition-adjusted (pooled regression on age/age2/educ/sex/race), real 2009 USD, FTFY sample"
 la var Inflow_Domestic       "Domestic-born gross in-migration from another US state, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor, interstate only); missing for Year=2001 (needs a Year=2000 origin stock not in this extract)"
 la var Inflow_Foreign        "Foreign-born gross in-migration, realized in Year (ACS MIGPLAC1, UHRSWORK>=35 sample, no FTFY floor; sum of the Inflow<BPL> columns below, so includes both interstate moves and new arrivals from abroad)"
 
@@ -626,3 +540,74 @@ sort STATEFIP Year
 
 save "${Data}/StateWageSupplyPanel.dta", replace
 di as text "Wrote ${Data}/StateWageSupplyPanel.dta"
+
+/*================================================================
+  BRANCH 2 OUTPUT: IndividualCpAnalysis.dta
+================================================================*/
+* State-year log relative wage for the probit, from the composition-adjusted
+* wages of the state panel just saved (still in memory).
+keep STATEFIP Year Wage_Domestic_Resid Wage_Foreign_Resid
+gen w_tilde = ln(Wage_Domestic_Resid / Wage_Foreign_Resid)
+la var w_tilde "ln(Wage_Domestic_Resid/Wage_Foreign_Resid), state-year composition-adjusted hourly wages (StateWageSupplyPanel.dta)"
+destring STATEFIP, replace
+keep STATEFIP Year w_tilde
+tempfile StateWageFile
+save `StateWageFile'
+
+use "${PeriSparber}/Abilities_occ1990.dta", clear
+gen manual   = (1/19)*(im_a22+im_a23+im_a24+im_a25+im_a26+im_a27+im_a28+im_a29 ///
+                       +im_a30+im_a31+im_a32+im_a33+im_a34+im_a35+im_a36+im_a37 ///
+                       +im_a38+im_a39+im_a40)
+gen language = (1/4)*(im_a1+im_a2+im_a3+im_a4)
+gen cm_ratio = language / manual
+keep occ1990 manual language cm_ratio
+ren occ1990 OCC1990
+la var cm_ratio "Peri-Sparber basic communication/manual ratio (language/manual), from their own ICPSR replication code"
+tempfile TaskAbility
+save `TaskAbility'
+
+frame change IndividualPanel
+capture frame drop default
+
+merge m:1 STATEFIP Year using `StateWageFile', keep(1 3) nogen
+merge m:1 OCC1990 using `TaskAbility', keep(1 3)
+di as text "--- OCC1990 merge with Peri-Sparber's occupation-ability index ---"
+tab _merge
+count if _merge == 1
+drop if _merge == 1
+drop _merge
+
+preserve
+    collapse (rawsum) TotalEmp = PERWT (mean) cm_ratio, by(OCC1990)
+    gsort cm_ratio
+    gen CumEmp = sum(TotalEmp)
+    qui summ CumEmp, meanonly
+    loc grand = r(max)
+    gen tau = (CumEmp - 0.5*TotalEmp) / `grand'
+    gen phi_inv_tau = invnormal(tau)
+    la var tau         "Employment-weighted percentile rank of Peri-Sparber's c/m ratio across occ1990 categories, pooled over all sample years"
+    la var phi_inv_tau "Phi^-1(tau) -- the model's task-index regressor"
+    keep OCC1990 tau phi_inv_tau cm_ratio TotalEmp
+    tempfile TauLookup
+    save `TauLookup'
+restore
+
+merge m:1 OCC1990 using `TauLookup', keep(1 3) nogen
+
+drop manual language
+
+la var STATEFIP    "State FIPS code"
+la var Year        "Survey year"
+la var OCC1990     "IPUMS occupation, 1990 basis"
+la var Foreign     "1 = foreign-born (BPL>=100), 0 = domestic-born -- the probit outcome, Pr(Foreign)=phi(tau)"
+la var PERWT       "ACS person weight"
+
+order STATEFIP Year OCC1990 Foreign PERWT w_tilde tau phi_inv_tau cm_ratio TotalEmp
+sort STATEFIP Year OCC1990
+
+count
+tab Foreign
+summ w_tilde tau phi_inv_tau cm_ratio
+
+save "${Data}/IndividualCpAnalysis.dta", replace
+di as text "Wrote ${Data}/IndividualCpAnalysis.dta"

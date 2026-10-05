@@ -50,15 +50,16 @@ evidence, (5) build tables and figures.
    `data/acs/Acs2001.dta`-`Acs2024.dta` to build the migration-flow panel, the individual-level probit file,
    and the state-level wage/supply panel. The state panel applies a full-time-full-year restriction
    (`UHRSWORK>=35` and weeks worked >=40) and reports hourly wages by state x year x nativity, both
-   unresidualized and composition-adjusted (residualized on age, age^2, education, sex, race with year fixed
-   effects, estimated separately by nativity and evaluated at each nativity's own mean characteristics), CPI-U
-   deflated to real 2009 dollars. `StateWageSupplyPanel.dta` feeds the EOS estimation (item 7) and the
-   local-projection panel (Step 4).
+   unresidualized and composition-adjusted (one pooled regression of log wages on age, age^2, education, sex, race
+   with year and birthplace-region fixed effects; the adjusted wage keeps the fixed effects and the residual), CPI-U
+   deflated to real 2009 dollars. Each person's adjusted wage is averaged in levels by state x year x nativity; **Everywhere the pipeline uses a wage, it uses these composition-adjusted wages**:
+   the probit's relative wage (item 6), the scale-parameter estimation (item 5), the EOS estimation (item 7), the
+   steady-state wage levels (Step 3, annualized at 2,080 hours), and the local-projection panel (Step 4).
     * Output(s): ```data/AcsPiPanel.dta```, ```data/IndividualCpAnalysis.dta```, ```data/StateWageSupplyPanel.dta```
 4. [**Clean ACS, CPS, GDP by State and Merge**](code/MakeStateAnalysisPreTfp.do)
     * Output(s): ```data/StateAnalysisPreTfp.dta```
 5. [**Estimate Scale Parameters**](code/EstimateScaleBetaAcs.do) (ν^D, ν^F)
-    * Input(s): ```data/AcsPiPanel.dta```
+    * Input(s): ```data/AcsPiPanel.dta```, ```data/StateWageSupplyPanel.dta```
     * Output(s): ```data/NuBetaEstimatesAcs.dta```
 6. [**Estimate CA Parameters**](code/EstimateCp.do) (μ_z, ξ_z, ξ_ω)
     * Input(s): ```data/IndividualCpAnalysis.dta```
@@ -94,7 +95,7 @@ the US to ROW aren't observed in the ACS/CPS.
 ## Step 3: Steady-State Solution and ROW Calibration
 1. [**Steady-State Solver**](code/SsSolve.jl) ([associated types and functions](code/SsSolve_Functions.jl))
     * Defines `Parameters`, `Solution`, and the non-stochastic steady-state solve.
-    * Input(s): ```AggSupply.jld2```, ```data/ThetaDelta.dta```, ```data/CpEstimates.dta```, ```data/NuBetaEstimatesAcs.dta```, ```data/BilateralCosts2015.dta```, ```data/StateAnalysisPreTfp.dta```, ```data/PopulationConstants.dta```
+    * Input(s): ```AggSupply.jld2```, ```data/ThetaDelta.dta```, ```data/CpEstimates.dta```, ```data/NuBetaEstimatesAcs.dta```, ```data/BilateralCosts2015.dta```, ```data/StateWageSupplyPanel.dta``` (2015 wages), ```data/StateAnalysisPreTfp.dta``` (2015 labor supplies), ```data/PopulationConstants.dta```
 2. [**Calibrate ROW Costs and Home Bias**](code/RowCostsEstimate.jl) ([associated types and functions](code/RowCostsEstimate_Functions.jl)) (f^D_ROW, B^D_ROW, f^F_ROW, B^F_ROW)
     * Jointly matches two stock-share targets (share of US-born abroad, share of foreign-born in the US labor force) and two flow-rate targets (domestic return-migration rate, foreign immigration rate) via a local nonlinear solve
     * Input(s): ```data/RowIncomeConstants.dta```, ```data/PopulationConstants.dta```, ```data/RowFlowCounts.dta```, ```data/StateAnalysisPreTfp.dta```, plus everything `SsSolve_Functions.jl` needs

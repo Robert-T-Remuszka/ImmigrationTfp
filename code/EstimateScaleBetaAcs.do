@@ -5,7 +5,9 @@ do Globals
 ACS-based estimate of the migration scale parameters (nu^D, nu^F):
 β=0.96 calibrated, single endogenous regressor = wage ratio at t+1,
 instrumented with the t-dated wage ratio and the t-1-dated flow-ratio
-term, route-specific FE absorbed. Input panel is AcsPiPanel.dta.
+term, route-specific FE absorbed. Flows and stocks come from AcsPiPanel.dta;
+wages are the composition-adjusted hourly wages in StateWageSupplyPanel.dta,
+dated t+1 (the arrival year) at both origin and destination.
 
 The endog() test below does not reject OLS==IV on either nativity, so the
 OLS estimate is used as the baseline, with the DWH test reported alongside.
@@ -13,7 +15,17 @@ OLS estimate is used as the baseline, with the DWH test reported alongside.
 
 loc bta = 0.96   // calibrated, matches Parameters()'s β default (annual equivalent of CDP's quarterly 0.99)
 
+use STATEFIP Year Wage_Domestic_Resid Wage_Foreign_Resid using "${Data}/StateWageSupplyPanel.dta", clear
+ren (STATEFIP Wage_Domestic_Resid Wage_Foreign_Resid) (Origin Wage_Domestic_Origin Wage_Foreign_Origin)
+tempfile WageOrigin
+save `WageOrigin'
+ren (Origin Wage_Domestic_Origin Wage_Foreign_Origin) (Destination Wage_Domestic_Dest Wage_Foreign_Dest)
+tempfile WageDest
+save `WageDest'
+
 use "${Data}/AcsPiPanel.dta", clear
+merge m:1 Origin Year      using `WageOrigin', keep(1 3) nogen
+merge m:1 Destination Year using `WageDest',   keep(1 3) nogen
 egen pairid = group(Origin Destination)
 
 /******************* STAY (DIAGONAL) FLOW LOOKUP, BUILT ONCE ********************/

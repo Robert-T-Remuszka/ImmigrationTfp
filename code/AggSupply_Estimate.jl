@@ -12,8 +12,8 @@ aggregates) from the model's factor-share condition,
 (mu_z, xi_omega, xi_z) are fixed/known in advance from EstimateCp.do, so rho
 is the only parameter estimated here.
 
-Estimation uses StateWageSupplyPanel.dta (ACS 2001-2024, FTFY, unresidualized
-hourly wages). Both sides of the factor-share condition depend on wages only
+Estimation uses StateWageSupplyPanel.dta (ACS 2001-2024, FTFY,
+composition-adjusted hourly wages). Both sides of the factor-share condition depend on wages only
 through the relative wage w=W^D/W^F (RHS, via I^F/I^D) and total labor income
 (LHS, w*L -- invariant to how it's split into price x quantity), so the
 choice between hourly and annual-equivalent wage units doesn't affect rho.
@@ -28,8 +28,8 @@ StateAnalysis = @chain DataFrame(load(joinpath(data, "StateWageSupplyPanel.dta")
     @mutate(
         Supply_Foreign  = Float64.(Supply_Foreign),
         Supply_Domestic = Float64.(Supply_Domestic),
-        Wage_Domestic   = Float64.(Wage_Domestic_Unresid),
-        Wage_Foreign    = Float64.(Wage_Foreign_Unresid)
+        Wage_Domestic   = Float64.(Wage_Domestic_Resid),
+        Wage_Foreign    = Float64.(Wage_Foreign_Resid)
     )
     @rename(statefip = STATEFIP, year = Year)
 end

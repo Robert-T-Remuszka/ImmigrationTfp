@@ -96,12 +96,12 @@ s_markers = (s_low, s_current, s_high)
 w_markers = solve_w.(s_markers)
 
 # Observed wage-ratio range for the shaded band on the Z(w) panel: the
-# 10th-90th percentile of W^D/W^F across state-years in the local-projection
+# 10th-90th percentile of composition-adjusted W^D/W^F across state-years in the local-projection
 # sample (StateAnalysisPanel.dta, DC excluded).
 band_pctiles = (0.10, 0.90)
 data_wage_ratios = let d = DataFrame(load(joinpath(data, "StateAnalysisPanel.dta")))
-    d = dropmissing(d[d.STATEFIP .!= "11", :], [:Wage_Domestic_Unresid, :Wage_Foreign_Unresid])
-    Float64.(d.Wage_Domestic_Unresid ./ d.Wage_Foreign_Unresid)
+    d = dropmissing(d[d.STATEFIP .!= "11", :], [:Wage_Domestic_Resid, :Wage_Foreign_Resid])
+    Float64.(d.Wage_Domestic_Resid ./ d.Wage_Foreign_Resid)
 end
 data_band = quantile(data_wage_ratios, band_pctiles)
 

@@ -352,16 +352,19 @@ function load_labor_supply()
 end
 
 """
-Load 2015 US state wages by nativity from StateAnalysisPreTfp.dta, sorted by
-state FIPS code to match load_bilateral_costs()'s state ordering.
+Load 2015 US state wages by nativity from StateWageSupplyPanel.dta, sorted by
+state FIPS code to match load_bilateral_costs()'s state ordering. These are
+the composition-adjusted hourly wages (real 2009 USD), scaled to annual
+earnings at `annual_hours` so they are in the same units as the Rest of
+World wage constants.
 """
-function load_wages()
+function load_wages(; annual_hours::Real = 2080)
 
-    df = DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta")))
-    df = df[df.year .== 2015, :]
-    sort!(df, :statefip)
+    df = DataFrame(load(joinpath(data, "StateWageSupplyPanel.dta")))
+    df = df[df.Year .== 2015, :]
+    sort!(df, :STATEFIP)
 
-    return (Wᵈ = Float64.(df.Wage_Domestic), Wᶠ = Float64.(df.Wage_Foreign))
+    return (Wᵈ = annual_hours .* Float64.(df.Wage_Domestic_Resid), Wᶠ = annual_hours .* Float64.(df.Wage_Foreign_Resid))
 
 end
 
