@@ -3,10 +3,6 @@
 # that Stata/Julia estimation output for Solve_Baseline_Functions.jl's Parameters() to consume
 # (load_cp_estimate, load_theta_delta, load_aggsupply_estimate, load_scale_estimate below) --
 # it does not re-run any estimation itself.
-#
-# MakeIRF.do estimates Indirect inference targets and saves the Iv1990 baseline (not the
-# Iv1990_LOO robustness check) to IRFEstimates.dta; load_irf_estimates() below
-# packages that the same way load_scale_estimate() packages the ν's.
 
 using DataFrames, StatFiles, JLD2
 
@@ -54,23 +50,5 @@ function load_scale_estimate()
     f  = only(eachrow(df[df.nativity .== "F", :]))
 
     return (νᵈ = d.nu_ols, νᶠ = f.nu_ols)
-
-end
-
-"""
-Load the section-4 LPIV impulse responses (Iv1990 baseline only) from
-MakeIRF.do's saved IRFEstimates.dta. Returns a Dict keyed by outcome name
-("Z", "L", "Wage_Domestic", "Wage_Foreign"), each holding the horizon-ordered
-vectors (h, β, se, F) needed to target these moments in indirect inference.
-"""
-function load_irf_estimates()
-
-    df = DataFrame(load(joinpath(data, "IRFEstimates.dta")))
-    sort!(df, [:outcome, :h])
-
-    return Dict(
-        first(g.outcome) => (h = g.h, β = g.beta, se = g.se, F = g.Fstat)
-        for g in groupby(df, :outcome)
-    )
 
 end

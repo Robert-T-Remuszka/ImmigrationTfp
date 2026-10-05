@@ -44,7 +44,7 @@ lagged because ACS's MIGPLAC1 (source of Inflow<BPL>) is backward-looking: a
 flow dated Year=t is the move between t-1 and t, so it must be scaled by the
 stock as of t-1, not the contemporaneous (post-flow) stock at t. The
 individual per-region share and growth-rate columns are kept (not collapsed
-away) for the Rotemberg-weight diagnostic in MakeIrf.do.
+away) so a Rotemberg-weight decomposition can be run on them.
 
 Alongside these, a new-arrivals version is built from NewArr<BPL> (arrivals
 from abroad only, excluding foreign-born interstate movers): BartikNew_1990
@@ -59,8 +59,8 @@ Practitioners", NBER WP 26501, sec. 5): with only 51 cross-sectional units,
 his own state-level-calibrated Monte Carlo shows population weighting can
 increase both bias and variance in exactly this kind of small-N IV setting.
 
-Saves data/StateAnalysisPanel.dta -- a new file, does not touch or replace
-the legacy data/StateAnalysis.dta (still used by the pre-existing MakeIRF.do).
+Saves data/StateAnalysisPanel.dta -- a separate file from
+data/StateAnalysis.dta (built by MakeStateAnalysis.do, used by MakePrePi.do).
 ================================================================*/
 
 /******************* Z, L, LAMBDA (FROM THE RHO ESTIMATION PANEL) ************/

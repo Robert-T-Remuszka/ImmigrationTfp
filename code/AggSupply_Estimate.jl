@@ -134,8 +134,8 @@ println("Saved p_star = ", p_star, " to AggSupply.jld2")
 # directly onto the estimation panel itself and export under its own name --
 # a single self-contained ACS 2001-2024 panel (wages, supply, and task
 # aggregates together), not routed through the legacy
-# StateAnalysisPreTfp.dta/MakeStateAnalysis.do chain. Not yet wired into
-# MakeIRF.do or any other downstream step.
+# StateAnalysisPreTfp.dta/MakeStateAnalysis.do chain. MakeLpivPanel.do reads
+# Z, L, λ from it.
 out = DataFrame(statefip = StateAnalysis.statefip, year = StateAnalysis.year,
                  Supply_Domestic = LD, Supply_Foreign = LF,
                  Wage_Domestic = wD, Wage_Foreign = wF,

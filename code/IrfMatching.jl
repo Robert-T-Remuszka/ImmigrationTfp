@@ -50,7 +50,7 @@ if Lᵈ_gap > 1e-4 || Lᶠ_gap > 1e-4
     println("WARNING: gap is large -- T may not be long enough, consider increasing T0")
 end
 
-# %% Model-implied IRFs for the same four outcomes MakeIRF.do's empirical
+# %% Model-implied IRFs for the same four outcomes MakeIrf.do's empirical
 # LPIV targets (Z, L, Wage_Foreign, Wage_Domestic): log-deviation of the
 # shooting path's national aggregate from the steady state at each horizon --
 # this is the object to compare against the empirical β_h (long-differenced

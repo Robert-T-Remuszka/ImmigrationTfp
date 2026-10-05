@@ -174,7 +174,7 @@ end
 """
 National aggregates -- Z, the task-weighted labor aggregate L, and
 employment-weighted average wages by nativity -- from a cross-section of US
-state-level wages and labor supplies. These are the four objects MakeIRF.do's
+state-level wages and labor supplies. These are the four objects MakeIrf.do's
 empirical LPIV estimates (Z, L, Wage_Foreign, Wage_Domestic), computed the
 same way from the steady state and from every period of a transition path so
 they're directly comparable. Only states 1:N-1 enter (Rest of World, index
@@ -208,8 +208,7 @@ end
 National-aggregate IRFs (log deviation from steady state) for Z, L,
 Wage_Foreign, Wage_Domestic at every horizon of a solved transition path --
 see national_aggregates for how each is constructed. Returns a NamedTuple of
-four length-(T+1) vectors, matching MakeIRF.do's `Z Wage_Domestic
-Wage_Foreign L` outcome set and combined-graph order.
+four length-(T+1) vectors, matching MakeIrf.do's outcome set.
 """
 function national_irfs(path::TransitionPath, ss::Solution, p::Parameters)
 

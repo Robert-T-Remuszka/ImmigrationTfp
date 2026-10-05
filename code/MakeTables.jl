@@ -24,9 +24,7 @@
 #     same moment.
 #   - (ψ, σ), which will be estimated by indirect inference against the
 #     section-4 LPIV impulse responses; left blank until that step (and the
-#     accompanying Jacobian/target-moment table) exists -- see
-#     Estimation_Funcs.jl's load_irf_estimates() for the current state of
-#     that handoff.
+#     accompanying Jacobian/target-moment table) exists.
 
 using JLD2, Printf
 

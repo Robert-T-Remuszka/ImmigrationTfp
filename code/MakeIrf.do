@@ -4,10 +4,9 @@ do Globals
 loc samp STATEFIP != "11"
 
 /*================================================================
-Analysis file for the LpivRefactor pipeline: reads data/StateAnalysisPanel.dta
-(built by MakeLpivPanel.do) and runs the empirical local-projection IV used to
-discipline the model's structural IRFs. Unlike the legacy MakeIRF.do, this
-file does not call into Functions.do -- all regression logic lives here.
+Reads data/StateAnalysisPanel.dta (built by MakeLpivPanel.do) and runs the
+empirical local-projection IV used to discipline the model's structural IRFs.
+All regression logic lives in this file.
 
 Migration shock (fg) and the instruments (BartikNewLoo_1990, BartikNewLoo_2000)
 are built in MakeLpivPanel.do, along with everything else in
