@@ -9,14 +9,16 @@ Analysis file for the LpivRefactor pipeline: reads data/StateAnalysisPanel.dta
 discipline the model's structural IRFs. Unlike the legacy MakeIRF.do, this
 file does not call into Functions.do -- all regression logic lives here.
 
-Migration shock (fg) and its instrument (BartikNewLoo_1990) are both built in
-MakeLpivPanel.do, along with everything else in data/StateAnalysisPanel.dta --
+Migration shock (fg) and the instruments (BartikNewLoo_1990, BartikNewLoo_2000)
+are built in MakeLpivPanel.do, along with everything else in
+data/StateAnalysisPanel.dta --
 fg = Inflow_Foreign / L.StockForeignTot, the foreign-born gross in-migration
 flow (ACS MIGPLAC1, realized between t-1 and t) scaled by the state's own
-foreign-born stock as of t-1; BartikNewLoo_1990 is the 1990 share of each of 11
+foreign-born stock as of t-1; BartikNewLoo_<year> is the <year> share of each of 11
 world regions in the state's foreign-born workforce interacted with that
 region's national growth rate from arrivals from abroad only, leaving out the
-state's own arrivals and stock, summed across regions. This file only does
+state's own arrivals and stock, summed across regions. The local projection
+uses BartikNewLoo_1990 with lags of fg as controls. This file only does
 analysis: first-stage checks, controls, and the local-projection IV itself. No
 population or employment weighting is used anywhere (see MakeLpivPanel.do's
 header).
@@ -87,11 +89,17 @@ esttab `lagmodels' using "${Tables}/Lag_exog.tex", replace booktabs se label non
     "\sym{*} \(p<0.1\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)")
 
 /*****************************
-    Local Projection IV, no lags: ln(y_{t+h}/y_{t-1}) = year FE + fg + e
-    fg instrumented by BartikNewLoo_1990 or BartikNewLoo_2000. Horizons 0-10, cluster by
-    state. Results frames are named by the pre-period year the instrument's
-    shares are drawn from.
+    Local Projection IV: ln(y_{t+h}/y_{t-1}) = year FE + fg + lags of fg + e
+    fg instrumented by BartikNewLoo_1990, controlling for the first `nlags'
+    lags of fg (the lags that forecast the instrument in the test above).
+    Horizons 0-10, cluster by state. Results frames are named by the
+    pre-period year the instrument's shares are drawn from.
 *****************************/
+loc nlags 5
+
+di "*************************** BARTIKNEWLOO_1990 FIRST STAGE, LAGS OF FG (EX-DC) ***"
+reghdfe fg BartikNewLoo_1990 L(1/`nlags').fg if `samp', absorb(Year) vce(cluster state)
+
 loc horizon 10
 loc ytitles `""Labor Productivity" "Labor Aggregate" "Wage Domestic" "Wage Foreign""'
 
@@ -113,7 +121,7 @@ foreach baseyear in 1990 {
             cap drop D_h_y
             gen double D_h_y = ln(F`h'.`v' / L.`v')
 
-            qui ivreg2 D_h_y (fg = BartikNewLoo_`baseyear') i.Year if `samp', cluster(state)
+            qui ivreg2 D_h_y (fg = BartikNewLoo_`baseyear') L(1/`nlags').fg i.Year if `samp', cluster(state)
 
             frame LpIv`baseyear'_Results: insobs 1
             frame LpIv`baseyear'_Results {
