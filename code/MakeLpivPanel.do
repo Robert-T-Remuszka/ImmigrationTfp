@@ -59,8 +59,7 @@ Practitioners", NBER WP 26501, sec. 5): with only 51 cross-sectional units,
 his own state-level-calibrated Monte Carlo shows population weighting can
 increase both bias and variance in exactly this kind of small-N IV setting.
 
-Saves data/StateAnalysisPanel.dta -- a separate file from
-data/StateAnalysis.dta (built by MakeStateAnalysis.do, used by MakePrePi.do).
+Saves data/StateAnalysisPanel.dta.
 ================================================================*/
 
 /******************* Z, L, LAMBDA (FROM THE RHO ESTIMATION PANEL) ************/
