@@ -5,6 +5,7 @@ notes/
 output/
 code/__pycache__
 .vscode/
+TeX/
 
 # Files
 CBO-vs-Census-NIM-Estimates.png
