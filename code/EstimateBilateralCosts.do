@@ -18,6 +18,9 @@ to find a defensible calibration period.
 ================================================================*/
 
 use "${Data}/AcsPiPanel.dta", clear
+* Flows realized in 2001 have no origin stock (the ACS extract starts in
+* 2001), so choice probabilities start at t = 2001.
+drop if mi(Supply_Domestic_Origin)
 gen pi_Domestic = Flow_Domestic / Supply_Domestic_Origin
 gen pi_Foreign  = Flow_Foreign  / Supply_Foreign_Origin
 
@@ -74,6 +77,9 @@ graph export "${Graphs}/CPStabilityByYear.pdf", replace as(pdf)
 
 /******************* (2) AGGREGATE (STOCK-WEIGHTED) MIGRATION RATE OVER TIME ****/
 use "${Data}/AcsPiPanel.dta", clear
+* Flows realized in 2001 have no origin stock (the ACS extract starts in
+* 2001), so choice probabilities start at t = 2001.
+drop if mi(Supply_Domestic_Origin)
 gen pi_Domestic = Flow_Domestic / Supply_Domestic_Origin
 gen pi_Foreign  = Flow_Foreign  / Supply_Foreign_Origin
 
