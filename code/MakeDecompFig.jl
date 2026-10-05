@@ -22,9 +22,8 @@
 #       bisection.
 #   (2) Z(w) is hump-shaped in the relative wage w, with a unique interior
 #       maximizer (found here numerically -- it need not be exactly w=1 in
-#       general, only when ξ_ω, ξ_z, μ_z happen to balance that way). The
-#       calibrated steady state's state-level wage ratios (SteadyState.jld2)
-#       cluster almost exactly there.
+#       general, only when ξ_ω, ξ_z, μ_z happen to balance that way). Most
+#       observed state-year wage ratios sit to the right of it.
 #   (3) The foreign-born task share λ(w) itself is smoothly increasing in w --
 #       the mechanism underlying both (1) and (2): a higher relative domestic
 #       wage shifts tasks toward foreign-born labor.
@@ -35,10 +34,10 @@
 # retyped from the paper's printed table. Axes are left numerically unlabeled
 # throughout: this is a conceptual illustration of *shape*, not a
 # calibrated-magnitude plot (the one exception is the shaded band on the Z(w)
-# panel, which marks the actual calibrated steady-state wage-ratio range from
-# SteadyState.jld2).
+# panel, which marks where observed state-year wage ratios in
+# StateAnalysisPanel.dta fall).
 
-using CairoMakie, StatsFuns, JLD2, Optim
+using CairoMakie, StatsFuns, JLD2, Optim, Statistics
 
 include("Globals.jl")
 include("Estimation_Funcs.jl")
@@ -96,20 +95,22 @@ w_grid        = solve_w.(s_grid)
 s_markers = (s_low, s_current, s_high)
 w_markers = solve_w.(s_markers)
 
-# Calibrated steady-state wage-ratio range (SteadyState.jld2's state-level
-# W^D/W^F), for the shaded band on the Z(w) panel. One state (DC) is an
-# extreme outlier (w≈0.44) that is not representative of the bulk
-# distribution, so the band reported is the range of the other 51 states.
-ss_wage_ratios = let d = JLD2.load(joinpath(@__DIR__, "SteadyState.jld2"))
-    sort(d["ss"].Wᵈ ./ d["ss"].Wᶠ)
+# Observed wage-ratio range for the shaded band on the Z(w) panel: the
+# 10th-90th percentile of W^D/W^F across state-years in the local-projection
+# sample (StateAnalysisPanel.dta, DC excluded).
+band_pctiles = (0.10, 0.90)
+data_wage_ratios = let d = DataFrame(load(joinpath(data, "StateAnalysisPanel.dta")))
+    d = dropmissing(d[d.STATEFIP .!= "11", :], [:Wage_Domestic_Unresid, :Wage_Foreign_Unresid])
+    Float64.(d.Wage_Domestic_Unresid ./ d.Wage_Foreign_Unresid)
 end
-ss_band = (ss_wage_ratios[2], ss_wage_ratios[end])
+data_band = quantile(data_wage_ratios, band_pctiles)
 
 println("w* (Z-maximizing relative wage) = $wstar, Z(w*) = $Zstar")
 for (s, w) in zip(s_markers, w_markers)
     println("  s = $(round(s, digits = 3)) -> w = $(round(w, digits = 4)), 1/w = $(round(1/w, digits = 4)), Z(w) = $(round(Z_of(w), digits = 4))")
 end
-println("Calibrated steady-state wage-ratio range (excl. 1 outlier state): ", ss_band)
+println("Observed wage-ratio band (percentiles $band_pctiles of $(length(data_wage_ratios)) state-years): ", data_band,
+        "; share above w* = ", round(mean(data_wage_ratios .> wstar), digits = 3))
 
 # %% Figure
 try
@@ -137,9 +138,9 @@ for (s, w, c) in zip(s_markers, w_markers, marker_colors)
     scatter!(ax1, [s], [1 / w], color = c, markersize = 12, strokecolor = :black, strokewidth = 0.5)
 end
 
-# --- Row 1, right: Z(w) hump, peak marked, calibrated band -----------------
+# --- Row 1, right: Z(w) hump, peak marked, observed band -------------------
 ax2 = Axis(fig[1, 2], xlabel = "w = Wᴰ/Wᶠ", ylabel = "Z")
-vspan!(ax2, ss_band[1], ss_band[2], color = (band, 0.4))
+vspan!(ax2, data_band[1], data_band[2], color = (band, 0.4))
 lines!(ax2, wgrid, Z_of.(wgrid), color = navy, linewidth = 2.5)
 vlines!(ax2, [wstar], color = gray, linestyle = :dash, linewidth = 1.5)
 scatter!(ax2, [wstar], [Zstar], color = gray, markersize = 12, strokecolor = :black, strokewidth = 0.5)
@@ -166,7 +167,7 @@ legend_elements = [
     LineElement(color = gray, linestyle = :dash, linewidth = 1.5),
     [MarkerElement(color = c, marker = :circle, markersize = 12, strokecolor = :black, strokewidth = 0.5) for c in marker_colors]...,
 ]
-legend_labels = ["Observed real-wage variation in sample", "w = 1", marker_labels...]
+legend_labels = ["Observed relative wages (10th–90th percentile)", "w = 1", marker_labels...]
 
 Legend(fig[3, 1:2], legend_elements, legend_labels;
     orientation = :horizontal, nbanks = 1, tellwidth = false, tellheight = true, framevisible = false)
