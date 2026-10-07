@@ -65,25 +65,25 @@ di "*************************** LAG-EXOGENEITY TEST (BARTIK_1990) **************
 reghdfe BartikNewLoo_1990 L(1/5).fg, absorb(Year) vce(cluster state)
 test L.fg L2.fg L3.fg L4.fg L5.fg
 
-* Table: the same test for each version of the instrument (dependent variable =
-* the instrument in each column), DC excluded, with the joint F-test on the lags.
+* Table: the same test for the 1990- and 2000-share versions of the instrument
+* (dependent variable = the instrument in each column), DC excluded, with the
+* joint F-test on the lags.
 loc lagmodels ""
-foreach z in Bartik_1990 BartikNew_1990 BartikNewLoo_1990 BartikNewLoo_2000 {
+foreach z in BartikNewLoo_1990 BartikNewLoo_2000 {
     eststo lag_`z': qui reghdfe `z' L(1/5).fg if `samp', absorb(Year) vce(cluster state)
     qui test L.fg L2.fg L3.fg L4.fg L5.fg
     estadd scalar Fjoint = r(F)
-    estadd scalar pjoint = r(p)
     loc lagmodels "`lagmodels' lag_`z'"
 }
 
 esttab `lagmodels' using "${Tables}/Lag_exog.tex", replace booktabs se label nonum ///
-    mtitles("All arrivals" "Abroad only" "\shortstack{Abroad,\\leave-one-out}" "\shortstack{Abroad, leave-one-out,\\2000 shares}") ///
+    mtitles("1990 Enclave" "2000 Enclave") ///
     keep(L.fg L2.fg L3.fg L4.fg L5.fg) ///
     varlabels(L.fg "Lag 1 of migration flow" L2.fg "Lag 2 of migration flow" L3.fg "Lag 3 of migration flow" L4.fg "Lag 4 of migration flow" L5.fg "Lag 5 of migration flow") ///
-    stats(Fjoint pjoint N r2_a, fmt(%9.2f %9.4f %6.0fc %9.3f) labels("Joint F, five lags" "Joint p-value" "Observations" "Adj. \$R^2\$")) ///
+    stats(Fjoint N r2_a, fmt(%9.2f %6.0fc %9.3f) labels("Joint F, five lags" "Observations" "Adj. \$R^2\$")) ///
     star(* 0.1 ** 0.05 *** 0.01) nonotes ///
     addnotes("Standard errors clustered by state, in parentheses." ///
-    "All regressions include year fixed effects; the sample excludes DC." ///
+    "All regressions include year fixed effects." ///
     "The dependent variable is the instrument named in each column." ///
     "\sym{*} \(p<0.1\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)")
 
