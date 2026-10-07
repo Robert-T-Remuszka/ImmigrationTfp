@@ -48,13 +48,14 @@ reghdfe fg BartikNewLoo_2000 if `samp', absorb(Year) vce(cluster state)
 /*****************************
     Visual IV: first-stage scatter, within-year variation only
 *****************************/
-reghdfe fg, absorb(Year) residuals(fg_tilde)
-reghdfe BartikNewLoo_1990, absorb(Year) residuals(bartik_tilde)
+reghdfe fg if `samp', absorb(Year) residuals(fg_tilde)
+reghdfe BartikNewLoo_1990 if `samp', absorb(Year) residuals(bartik_tilde)
 
-twoway (scatter fg_tilde bartik_tilde, mcolor(%40) msize(small)) ///
-       (lfit fg_tilde bartik_tilde, lcolor(red) lwidth(medthick)), ///
-       legend(off) ytitle("Migration rate") xtitle("Bartik new-arrivals leave-one-out 1990") ///
-       xlab(,nogrid) ylab(,nogrid) note("Residualized on time fixed effects")
+twoway (scatter fg_tilde bartik_tilde, mcolor(ebblue%40) msize(small)) ///
+       (lfit fg_tilde bartik_tilde, lcolor(black) lwidth(medthick)), ///
+       legend(off) ytitle("Migration flow") xtitle("Shift-share instrument, 1990 enclave") ///
+       xlab(,nogrid) ylab(,nogrid) name(VisualIv_1990, replace)
+graph export "${Graphs}/VisualIv_1990.pdf", name(VisualIv_1990) replace
 
 /*****************************
     Lag-exogeneity test (Stock-Watson 2018, Condition LP-IV(iii)): the
