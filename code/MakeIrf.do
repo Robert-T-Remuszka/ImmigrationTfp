@@ -100,7 +100,7 @@ loc nlags 5
 di "*************************** BARTIKNEWLOO_1990 FIRST STAGE, LAGS OF FG (EX-DC) ***"
 reghdfe fg BartikNewLoo_1990 L(1/`nlags').fg if `samp', absorb(Year) vce(cluster state)
 
-loc horizon 10
+loc horizon 9
 loc ytitles `""Labor Productivity" "Labor Aggregate" "Wage Domestic" "Wage Foreign""'
 
 foreach baseyear in 1990 {
