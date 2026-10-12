@@ -36,6 +36,9 @@
 # calibrated-magnitude plot (the one exception is the shaded band on the Z(w)
 # panel, which marks where observed state-year wage ratios in
 # StateAnalysisPanel.dta fall).
+#
+# A second, two-panel version for slides is saved alongside it: the relative
+# wage w against relative supply, and Z(w) with the w = 1 reference line.
 
 using CairoMakie, StatsFuns, JLD2, Optim, Statistics
 
@@ -175,3 +178,27 @@ Legend(fig[3, 1:2], legend_elements, legend_labels;
 outfile = joinpath(graphs, "TaskSpecializationIllustration.pdf")
 save(outfile, fig)
 println("Saved figure to $outfile ($(filesize(outfile)) bytes)")
+
+# %% Slide version: two panels, relative wage against relative supply and Z(w)
+fig_slide = Figure(size = (720, 350))
+
+# --- Left: market-clearing relative wage w(s), increasing in s --------------
+axs1 = Axis(fig_slide[1, 1], xlabel = "Lᶠ/Lᴰ", ylabel = "w = Wᴰ/Wᶠ")
+lines!(axs1, s_grid, w_grid, color = navy, linewidth = 2.5)
+
+# --- Right: Z(w) hump with the w = 1 reference line -------------------------
+axs2 = Axis(fig_slide[1, 2], xlabel = "w = Wᴰ/Wᶠ", ylabel = "Z")
+lines!(axs2, wgrid, Z_of.(wgrid), color = navy, linewidth = 2.5)
+vlines!(axs2, [wstar], color = gray, linestyle = :dash, linewidth = 1.5)
+scatter!(axs2, [wstar], [Zstar], color = gray, markersize = 12, strokecolor = :black, strokewidth = 0.5)
+axislegend(axs2, [LineElement(color = gray, linestyle = :dash, linewidth = 1.5)], ["w = 1"];
+    position = :rt, framevisible = false)
+
+for ax in (axs1, axs2)
+    hidedecorations!(ax, label = false, ticklabels = true, ticks = true, minorticks = true)
+    hidespines!(ax, :t, :r)
+end
+
+outfile_slide = joinpath(graphs, "TaskSpecializationSlide.pdf")
+save(outfile_slide, fig_slide)
+println("Saved figure to $outfile_slide ($(filesize(outfile_slide)) bytes)")
