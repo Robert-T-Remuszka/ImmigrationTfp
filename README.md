@@ -119,7 +119,7 @@ the US to ROW aren't observed in the ACS/CPS.
 ## Step 5: Tables and Figures
 1. [**Build Parameter Table**](code/MakeTables.jl)
     * Input(s): ```data/CpEstimates.dta```, ```AggSupply.jld2```, ```data/NuBetaEstimatesAcs.dta```, ```code/RowCosts.jld2```
-    * Output(s): ```output/tables/ParameterEstimates.tex```
+    * Output(s): ```output/tables/ParameterEstimates.tex```, ```output/tables/ParameterEstimatesSlide.tex``` (same table with text sources, for slides)
 2. [**Task-Specialization Illustration**](code/MakeDecompFig.jl) -- relative wage, productivity and the foreign task share
    at the estimated parameters, with the observed range of relative wages shaded; also a two-panel version for slides
    (relative wage against relative supply, and productivity against the relative wage).

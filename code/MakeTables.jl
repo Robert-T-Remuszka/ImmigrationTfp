@@ -1,4 +1,6 @@
-# Builds output/tables/ParameterEstimates.tex. Panel A ("Estimating Equations") reports
+# Builds output/tables/ParameterEstimates.tex (paper) and output/tables/ParameterEstimatesSlide.tex
+# (slides; same two panels, with a text source in place of the paper's equation references).
+# Panel A ("Estimating Equations") reports
 # the parameters estimated directly from data under the log-normal
 # task-assignment parameterization:
 #   - (μ_z, ξ_ω, ξ_z), fit by EstimateCp.do's producer choice-probability
@@ -22,9 +24,6 @@
 #     rerun) -- not just each parameter's individually-largest elasticity,
 #     which for the domestic pair would double-assign both parameters to the
 #     same moment.
-#   - (ψ, σ), which will be estimated by indirect inference against the
-#     section-4 LPIV impulse responses; left blank until that step (and the
-#     accompanying Jacobian/target-moment table) exists.
 
 using JLD2, Printf
 
@@ -40,14 +39,18 @@ rowcosts  = load_row_costs()
 fmt(x) = @sprintf("%.3f", x)
 pct(x) = @sprintf("%.3f\\%%", 100x)
 
-# (symbol, value, estimating-equation label)
+# Elasticity of substitution implied by ρ, shown next to ρ's source on the slide table
+σ̂ = 1 / (1 - aggsupply.ρ)
+
+# (symbol, value, estimating-equation label, slide source)
 panelA = [
-    ("\\mu_z",         fmt(cp.μ_z),         "eq:agg-foreign-cp"),
-    ("\\xi_z",         fmt(cp.ξ_z),         "eq:agg-foreign-cp"),
-    ("\\xi_\\omega",   fmt(cp.ξ_ω),         "eq:agg-foreign-cp"),
-    ("\\rho",          fmt(aggsupply.ρ),    "eq:foreign-labor-share"),
-    ("\\nu^D",         fmt(scale.νᵈ),       "eq:scale-estimating"),
-    ("\\nu^F",         fmt(scale.νᶠ),       "eq:scale-estimating"),
+    ("\\mu_z",         fmt(cp.μ_z),         "eq:agg-foreign-cp",      "Task shares (probit)"),
+    ("\\xi_z",         fmt(cp.ξ_z),         "eq:agg-foreign-cp",      "Task shares (probit)"),
+    ("\\xi_\\omega",   fmt(cp.ξ_ω),         "eq:agg-foreign-cp",      "Task shares (probit)"),
+    ("\\rho",          fmt(aggsupply.ρ),    "eq:foreign-labor-share",
+        "Foreign-born factor share \$\\rightarrow\\hat\\sigma = " * @sprintf("%.2f", σ̂) * "\$"),
+    ("\\nu^D",         fmt(scale.νᵈ),       "eq:scale-estimating",    "Migration flows on wages and future flows"),
+    ("\\nu^F",         fmt(scale.νᶠ),       "eq:scale-estimating",    "Migration flows on wages and future flows"),
 ]
 
 # (symbol, value, target title, model, data) -- shares/rates in percent so a
@@ -64,34 +67,40 @@ panelB_matched = [
         pct(rowcosts.model_F_us), pct(rowcosts.target_F_us)),
 ]
 
-# (symbol,) -- Value/Target/Model/Data all pending indirect inference
-panelB_pending = ["\\psi", "\\sigma"]
+"""
+Write the two-panel parameter table. `source_header` is Panel A's column
+heading and `source(row)` the text placed under it for each Panel A row.
+"""
+function write_parameter_table(outpath; source_header, source)
 
-io = IOBuffer()
-println(io, "{")
-println(io, "\\begin{tabular}{lclcc}")
-println(io, "\\toprule")
-println(io, " & Value & \\multicolumn{3}{l}{Equation} \\\\")
-println(io, "\\midrule")
-println(io, "\\multicolumn{5}{l}{\\textit{Panel A. Estimating Equations}} \\\\[6pt]")
-for (i, (sym, val, eqlabel)) in enumerate(panelA)
-    sep = i == length(panelA) ? "\\\\[6pt]" : "\\\\"
-    println(io, "\$", sym, "\$ & ", val, " & \\multicolumn{3}{l}{Eq. \\ref{", eqlabel, "}} ", sep)
+    io = IOBuffer()
+    println(io, "{")
+    println(io, "\\begin{tabular}{lclcc}")
+    println(io, "\\toprule")
+    println(io, " & Value & \\multicolumn{3}{l}{", source_header, "} \\\\")
+    println(io, "\\midrule")
+    println(io, "\\multicolumn{5}{l}{\\textit{Panel A. Estimating Equations}} \\\\[6pt]")
+    for (i, row) in enumerate(panelA)
+        sep = i == length(panelA) ? "\\\\[6pt]" : "\\\\"
+        println(io, "\$", row[1], "\$ & ", row[2], " & \\multicolumn{3}{l}{", source(row), "} ", sep)
+    end
+    println(io, " & Value & Target & Model & Data \\\\")
+    println(io, "\\midrule")
+    println(io, "\\multicolumn{5}{l}{\\textit{Panel B. Moment Matching}} \\\\[6pt]")
+    for (sym, val, target, model, dat) in panelB_matched
+        println(io, "\$", sym, "\$ & ", val, " & ", target, " & ", model, " & ", dat, " \\\\")
+    end
+    println(io, "\\bottomrule")
+    println(io, "\\end{tabular}")
+    println(io, "}")
+
+    write(outpath, String(take!(io)))
+    println("Wrote ", outpath)
+
 end
-println(io, " & Value & Target & Model & Data \\\\")
-println(io, "\\midrule")
-println(io, "\\multicolumn{5}{l}{\\textit{Panel B. Moment Matching}} \\\\[6pt]")
-for (sym, val, target, model, dat) in panelB_matched
-    println(io, "\$", sym, "\$ & ", val, " & ", target, " & ", model, " & ", dat, " \\\\")
-end
-for sym in panelB_pending
-    println(io, "\$", sym, "\$ & -- & -- & -- & -- \\\\")
-end
-println(io, "\\bottomrule")
-println(io, "\\end{tabular}")
-println(io, "}")
 
 mkpath(tables)
-outpath = joinpath(tables, "ParameterEstimates.tex")
-write(outpath, String(take!(io)))
-println("Wrote ", outpath)
+write_parameter_table(joinpath(tables, "ParameterEstimates.tex");
+    source_header = "Equation", source = row -> "Eq. \\ref{" * row[3] * "}")
+write_parameter_table(joinpath(tables, "ParameterEstimatesSlide.tex");
+    source_header = "Source", source = row -> row[4])
