@@ -58,40 +58,48 @@ choiceprob_heatmap = plot(
 
 # %% ############################## Heatmaps of the inverted bilateral migration costs fᵈ, fᶠ ####################
 # Both panels share one color scale so the domestic/foreign cost structures
-# are directly comparable.
+# are directly comparable. Two versions are saved: all 51 US locations, and
+# the 50 states without DC.
 costs = load_bilateral_costs()
 state_labels = labels[1:end - 1]
-clims = (0, max(maximum(costs.fᵈ), maximum(costs.fᶠ)))
 
-# Tight axis limits (cells are centered on 1:51) so there's no default padding
-# between the axis and the first/last row or column of the heatmap.
-tight_lims = (0.5, 51.5)
+"""
+Side-by-side heatmaps of fᵈ and fᶠ for the locations in `idx`, with a single
+shared colorbar in its own panel so it doesn't shrink either heatmap's
+plotting area. Axis limits are tight (cells are centered on 1:n) so there is
+no padding between the axis and the first/last row or column.
+"""
+function cost_heatmap_figure(fᵈ, fᶠ, state_labels, idx)
 
-d_heatmap = heatmap(costs.fᵈ, title = "Domestic Born", xlabel = "Destination", ylabel = "Origin",
-    xticks = (1:51, state_labels), yticks = (1:51, state_labels), xrotation = 90,
-    xtickfontsize = 7, ytickfontsize = 7, yflip = true, clims = clims,
-    xlims = tight_lims, ylims = tight_lims,
-    color = :viridis, aspect_ratio = 1, colorbar = false, grid = false,
-    left_margin = 12Plots.mm, bottom_margin = 8Plots.mm)
-f_heatmap = heatmap(costs.fᶠ, title = "Foreign Born", xlabel = "Destination", ylabel = "Origin",
-    xticks = (1:51, state_labels), yticks = (1:51, state_labels), xrotation = 90,
-    xtickfontsize = 7, ytickfontsize = 7, yflip = true, clims = clims,
-    xlims = tight_lims, ylims = tight_lims,
-    color = :viridis, aspect_ratio = 1, colorbar = false, grid = false,
-    left_margin = 12Plots.mm, bottom_margin = 8Plots.mm, right_margin = 10Plots.mm)
+    n = length(idx)
+    fd, ff, labs = fᵈ[idx, idx], fᶠ[idx, idx], state_labels[idx]
+    clims = (0, max(maximum(fd), maximum(ff)))
+    tight_lims = (0.5, n + 0.5)
 
-# A single shared colorbar in its own panel, so it doesn't shrink either
-# heatmap's plotting area the way putting colorbar=true on one panel would.
-# All-NaN heatmap draws no visible cells, only the colorbar itself.
-cbar = heatmap(fill(NaN, 2, 2), clims = clims, color = :viridis, colorbar = true,
-    colorbar_title = "Cost", framestyle = :none, legend = false,
-    xaxis = false, yaxis = false, xticks = false, yticks = false,
-    right_margin = 10Plots.mm)
+    panel(f, title; right_margin = 0Plots.mm) = heatmap(f, title = title, xlabel = "Destination", ylabel = "Origin",
+        xticks = (1:n, labs), yticks = (1:n, labs), xrotation = 90,
+        xtickfontsize = 7, ytickfontsize = 7, yflip = true, clims = clims,
+        xlims = tight_lims, ylims = tight_lims,
+        color = :viridis, aspect_ratio = 1, colorbar = false, grid = false,
+        left_margin = 12Plots.mm, bottom_margin = 8Plots.mm, right_margin = right_margin)
 
-cost_heatmap = plot(d_heatmap, f_heatmap, cbar,
-    layout = @layout([a b c{0.10w}]), size = (2000, 850))
+    # All-NaN heatmap draws no visible cells, only the colorbar itself.
+    cbar = heatmap(fill(NaN, 2, 2), clims = clims, color = :viridis, colorbar = true,
+        colorbar_title = "Cost", framestyle = :none, legend = false,
+        xaxis = false, yaxis = false, xticks = false, yticks = false,
+        right_margin = 10Plots.mm)
+
+    return plot(panel(fd, "Domestic Born"), panel(ff, "Foreign Born"; right_margin = 10Plots.mm), cbar,
+        layout = @layout([a b c{0.10w}]), size = (2000, 850))
+
+end
+
+cost_heatmap = cost_heatmap_figure(costs.fᵈ, costs.fᶠ, state_labels, 1:length(state_labels))
 savefig(cost_heatmap, joinpath(graphs, "BilateralCostsHeatmap.pdf"))
-cost_heatmap
+
+cost_heatmap_50 = cost_heatmap_figure(costs.fᵈ, costs.fᶠ, state_labels, findall(!=("DC"), state_labels))
+savefig(cost_heatmap_50, joinpath(graphs, "BilateralCostsHeatmap50.pdf"))
+cost_heatmap_50
 
 # %% ################################# Full steady-state demo:
 # all four ROW costs still placeholders (0), and
