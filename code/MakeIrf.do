@@ -232,13 +232,16 @@ esttab pc_lagexog6 pc_lagexog5 pc_firststage using "${Tables}/Lag_exog_PctChg.te
 
 /*****************************
     Local Projection IV: ln(y_{t+h}/y_{t-1}) = year FE + dlnLF + lags of dlnLF + e
-    dlnLF instrumented by BartikNewLoo_1990. The foreign-born and
-    domestic-born stocks are added as outcomes: the foreign-born response is
+    dlnLF instrumented by BartikNewLoo_1990. The relative wage
+    (domestic over foreign) and the foreign-born and domestic-born stocks
+    are added as outcomes: the foreign-born response is
     one at h = 0 by construction, so every coefficient is per one percent
     increase in the foreign-born stock on impact.
 *****************************/
-loc ytitles `""Labor Productivity" "Labor Aggregate" "Wage Domestic" "Wage Foreign" "Foreign-Born Labor" "Domestic-Born Labor""'
-loc outcomes "Z L Wage_Domestic_Resid Wage_Foreign_Resid Supply_Foreign Supply_Domestic"
+gen double Wage_Relative = Wage_Domestic_Resid / Wage_Foreign_Resid
+
+loc ytitles `""Labor Productivity" "Labor Aggregate" "Wage Domestic" "Wage Foreign" "Relative Wage" "Foreign-Born Labor" "Domestic-Born Labor""'
+loc outcomes "Z L Wage_Domestic_Resid Wage_Foreign_Resid Wage_Relative Supply_Foreign Supply_Domestic"
 
 frame create LpIvPctChg_Results
 frame LpIvPctChg_Results {
@@ -292,7 +295,7 @@ frame LpIvPctChg_Results {
         loc ++i
     }
 
-    graph combine `plots', rows(2) cols(3) xsize(9) ysize(5) name(BaselinePctChg_1990)
+    graph combine `plots', rows(2) cols(4) xsize(12) ysize(5) name(BaselinePctChg_1990)
     graph export "${Graphs}/LpivBaselinePctChg_1990.pdf", name(BaselinePctChg_1990) replace
 
     list variable h beta se first_stage_F if inlist(h, 0, 1, 2, 5, 10), noobs sepby(variable)
