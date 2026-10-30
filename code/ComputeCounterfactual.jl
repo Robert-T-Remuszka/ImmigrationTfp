@@ -2,15 +2,16 @@
 using DataFrames, StatFiles, JLD2
 
 include("Globals.jl")
-include("RowCostsEstimate_Functions.jl")
+include("TransitionSolve_Functions.jl")
 
 #=================================================================
-Autarky counterfactual, steady state to steady state. The baseline is the
-calibrated non-stochastic steady state. The counterfactual makes entering the
-US infinitely costly for the foreign-born: row N of fᶠ (Rest of World as
-origin) is Inf for every US destination and 0 on the diagonal. The
-foreign-born already in the US still draw taste shocks and leave, and none
-can enter, so the US has no foreign-born labor in the new steady state.
+Autarky counterfactual, both steady state to steady state and along the
+transition. The baseline is the calibrated non-stochastic steady state. The
+counterfactual makes entering the US infinitely costly for the foreign-born:
+row N of fᶠ (Rest of World as origin) is Inf for every US destination and 0 on
+the diagonal. The foreign-born already in the US still draw taste shocks and
+leave, and none can enter, so the US has no foreign-born labor in the new
+steady state.
 =================================================================#
 
 # %% Baseline: calibrated parameters and steady state
@@ -98,6 +99,47 @@ println("Rest of World foreign wage: measured ", round(Wᶠ_ROW, digits = 1), " 
         "   baseline US foreign wage: mean ", round(sum(weightsᶠ .* ss.Wᶠ[1:L]), digits = 1))
 println("Domestic-born share abroad: baseline ", round(100ss.Lᵈ[p.N] / total_Lᵈ, digits = 3),
         "%  autarky ", round(100Lᵈ_autarky[p.N] / total_Lᵈ, digits = 3), "%")
+
+# %% Transition: the border closes unexpectedly at t=0
+# Labor at t=0 is predetermined at the baseline steady state and the
+# foreign-born already in the US leave only through their own choices.
+T_transition = 300
+path = solve_transition(p, ss, repeat(fᶠ_autarky, 1, 1, T_transition + 1))
+
+# Consumption equivalent ς along the transition: ln(1+ς)/(1-β) = V̂₀ - V, the
+# permanent proportional change in baseline consumption worth the same as
+# closing the border. ς<0 is a loss from closing it.
+ςᵈ = consumption_equivalent.(path.Vᵈ[:, 1], ss.Vᵈ)
+ςᶠ = consumption_equivalent.(path.Vᶠ[:, 1], ss.Vᶠ)
+
+# Common ς whose log is the population-weighted mean of the log ς's
+log_mean(μ, ς) = exp(sum(μ .* log.(1 .+ ς))) - 1
+ςᵈ_mean = log_mean(weightsᵈ, ςᵈ[1:L])
+ςᶠ_mean = log_mean(weightsᶠ, ςᶠ[1:L])
+
+# Wage and option-value annuities in the value decomposition, by location
+discounts = p.β .^ (0:T_transition - 1)
+wage_term(Ŵ, W) = [(1 - p.β) * sum(discounts .* log.(Ŵ[l, 1:T_transition] ./ W[l])) for l in 1:p.N]
+option_term(Π̂, Π, ν) = [-(1 - p.β) * ν * sum(discounts .* log.(Π̂[l, l, 1:T_transition] ./ Π[l, l])) for l in 1:p.N]
+wage_termᵈ, option_termᵈ = wage_term(path.Wᵈ, ss.Wᵈ), option_term(path.Πᵈ, ss.Πᵈ, p.νᵈ)
+wage_termᶠ, option_termᶠ = wage_term(path.Wᶠ, ss.Wᶠ), option_term(path.Πᶠ, ss.Πᶠ, p.νᶠ)
+
+# The value difference equals the two annuities plus the terminal value term
+terminal_termᵈ = (1 - p.β) * p.β^T_transition .* (path.Vᵈ[:, end] .- ss.Vᵈ)
+terminal_termᶠ = (1 - p.β) * p.β^T_transition .* (path.Vᶠ[:, end] .- ss.Vᶠ)
+gapᵈ = maximum(abs, wage_termᵈ .+ option_termᵈ .+ terminal_termᵈ .- log.(1 .+ ςᵈ))
+gapᶠ = maximum(abs, wage_termᶠ .+ option_termᶠ .+ terminal_termᶠ .- log.(1 .+ ςᶠ))
+println("Value difference vs. wage + option + terminal terms, max gap: domestic ", gapᵈ, "  foreign ", gapᶠ)
+
+println("Domestic-born in US states, ς: mean ", round(100ςᵈ_mean, digits = 3),
+        "%  min ", round(100minimum(ςᵈ[1:L]), digits = 3), "%  max ", round(100maximum(ςᵈ[1:L]), digits = 3),
+        "%  (wage ", round(100sum(weightsᵈ .* wage_termᵈ[1:L]), digits = 3), "%, option value ", round(100sum(weightsᵈ .* option_termᵈ[1:L]), digits = 3), "%)")
+println("Foreign-born in US states, ς: mean ", round(100ςᶠ_mean, digits = 3),
+        "%  min ", round(100minimum(ςᶠ[1:L]), digits = 3), "%  max ", round(100maximum(ςᶠ[1:L]), digits = 3),
+        "%  (wage ", round(100sum(weightsᶠ .* wage_termᶠ[1:L]), digits = 3), "%, option value ", round(100sum(weightsᶠ .* option_termᶠ[1:L]), digits = 3), "%)")
+println("Domestic-born in Rest of World, ς: ", round(100ςᵈ[p.N], digits = 3), "%")
+println("Foreign-born in Rest of World, ς: ", round(100ςᶠ[p.N], digits = 3), "%")
+println("Foreign-born in the US at t=T relative to the baseline: ", round(sum(path.Lᶠ[1:L, end]) / sum(ss.Lᶠ[1:L]), digits = 4))
 
 # %% Table: consumption-equivalent gains from migration, baseline relative to autarky (percent)
 # The domestic-born mean weights states by baseline domestic-born labor.
