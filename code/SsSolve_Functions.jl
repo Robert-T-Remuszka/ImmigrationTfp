@@ -30,7 +30,9 @@ end
 
 """
 Steady-state values, wages, labor supplies, and choice probabilities, by
-nativity. Wᵈ, Wᶠ are inputs here, not yet solved for by market clearing.
+nativity, and the admission probability ξ for foreign-born entry from Rest of
+World. Wᵈ, Wᶠ and ξ are inputs here, not yet solved for by market clearing
+and quota clearing.
 """
 struct Solution{T <: Real}
     Vᵈ::Vector{T}
@@ -41,6 +43,7 @@ struct Solution{T <: Real}
     Lᶠ::Vector{T}
     Πᵈ::Matrix{T}
     Πᶠ::Matrix{T}
+    ξ::T
 end
 
 # %% Solver Functions =========================================================
@@ -218,53 +221,70 @@ function market_clearing_wage(Lᵈ::Real, Lᶠ::Real, p::Parameters)
 end
 
 """
-Residual of the full steady-state wage system: given log-wages for the 50 US
-states (both nativities; Rest of World's wages are fixed exogenously), solve
-the migration block for the labor allocation those wages generate, then
-return the gap between the guessed wages and the wages market clearing
-implies at that allocation. This is zero exactly at the non-stochastic
-steady state.
+Foreign-born applicants for US entry: the foreign-born in Rest of World times
+their application probability 1 - π̃ᶠ[ROW,ROW].
 """
-function steady_state_residual(logW::Vector{T}, params) where {T <: Real}
+applicants(s::Solution, p::Parameters) = leave_probability(s.Vᶠ, p.fᶠ, p.β, p.νᶠ, p.N) * s.Lᶠ[p.N]
 
-    (; p, Wᵈ_ROW, Wᶠ_ROW, total_Lᵈ, total_Lᶠ, ξ) = params
+"""
+Admission probability that clears the quota ι given the applicants at `s`:
+ξ = min{1, ι/applicants}. ι = Inf is no quota.
+"""
+quota_admission_probability(s::Solution, p::Parameters, ι::Real) = min(1.0, ι / applicants(s, p))
+
+"""
+Residual of the full steady-state system. The unknowns are the log-wages for
+the 50 US states (both nativities; Rest of World's wages are fixed
+exogenously) and the log admission probability ln ξ. Solve the migration
+block for the labor allocation those wages and ξ generate, then return the
+gap between the guessed wages and the wages market clearing implies at that
+allocation, and between the guessed ξ and the ξ that clears the quota ι.
+This is zero exactly at the non-stochastic steady state.
+"""
+function steady_state_residual(x::Vector{T}, params) where {T <: Real}
+
+    (; p, Wᵈ_ROW, Wᶠ_ROW, total_Lᵈ, total_Lᶠ, ι) = params
     L = p.N - 1
 
-    Wᵈ = vcat(exp.(logW[1:L]), Wᵈ_ROW)
-    Wᶠ = vcat(exp.(logW[L + 1:2L]), Wᶠ_ROW)
+    Wᵈ = vcat(exp.(x[1:L]), Wᵈ_ROW)
+    Wᶠ = vcat(exp.(x[L + 1:2L]), Wᶠ_ROW)
+    ξ  = exp(x[end])
 
     s = Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ, ξ)
 
-    res = similar(logW)
+    res = similar(x)
     for l in 1:L
         Wᵈ_new, Wᶠ_new = market_clearing_wage(s.Lᵈ[l], s.Lᶠ[l], p)
-        res[l]     = log(Wᵈ_new) - logW[l]
-        res[L + l] = log(Wᶠ_new) - logW[L + l]
+        res[l]     = log(Wᵈ_new) - x[l]
+        res[L + l] = log(Wᶠ_new) - x[L + l]
     end
+    res[end] = log(quota_admission_probability(s, p, ι)) - x[end]
 
     return res
 
 end
 
 """
-Solve the full non-stochastic steady state: wages, values, labor supplies,
-and choice probabilities jointly consistent with the migration block and
-market clearing. Uses a finite-difference Jacobian rather than
-differentiating through the nested EMAX/relative-wage Newton solves inside
-the residual -- more robust, and cheap enough at this problem size (102
-wage unknowns) that there's no real efficiency case for the riskier route.
-Wᵈ_ROW, Wᶠ_ROW are the calibrated Rest of World wages; `ξ` is the admission
-probability for foreign-born entry from Rest of World (ξ = 1: no quota).
+Solve the full non-stochastic steady state: wages, the admission probability
+ξ, values, labor supplies, and choice probabilities jointly consistent with
+the migration block, market clearing in every state and clearing of the
+quota ι. Uses a finite-difference Jacobian rather than differentiating
+through the nested EMAX/relative-wage Newton solves inside the residual --
+more robust, and cheap enough at this problem size (100 wage unknowns plus ξ)
+that there's no real efficiency case for the riskier route.
+Wᵈ_ROW, Wᶠ_ROW are the calibrated Rest of World wages; ι is the quota on
+foreign-born entry from Rest of World, in the same units as total_Lᵈ,
+total_Lᶠ (ι = Inf: no quota). ξ0 is the starting guess for ξ.
 """
 function solve_steady_state(p::Parameters; Wᵈ_ROW::Real, Wᶠ_ROW::Real,
                              total_Lᵈ::Real, total_Lᶠ::Real,
-                             W0ᵈ::Vector{<:Real}, W0ᶠ::Vector{<:Real}, ξ::Real = 1.0,
+                             W0ᵈ::Vector{<:Real}, W0ᶠ::Vector{<:Real}, ι::Real = Inf, ξ0::Real = 1.0,
                              abstol::Real = 1e-8, maxiters::Integer = 1000)
 
-    params = (; p, Wᵈ_ROW = Float64(Wᵈ_ROW), Wᶠ_ROW = Float64(Wᶠ_ROW), total_Lᵈ, total_Lᶠ, ξ)
-    logW0 = log.(Float64.(vcat(W0ᵈ, W0ᶠ)))
+    params = (; p, Wᵈ_ROW = Float64(Wᵈ_ROW), Wᶠ_ROW = Float64(Wᶠ_ROW), total_Lᵈ, total_Lᶠ, ι = Float64(ι))
+    x0 = vcat(log.(Float64.(vcat(W0ᵈ, W0ᶠ))), log(Float64(ξ0)))
 
-    prob = NonlinearProblem(steady_state_residual, logW0, params)
+    prob = NonlinearProblem(steady_state_residual, x0, params)
     sol  = solve(prob, NewtonRaphson(autodiff = AutoFiniteDiff()); abstol, maxiters)
 
     sol.retcode == ReturnCode.Success || error("Steady-state solve failed (retcode=$(sol.retcode))")
@@ -273,7 +293,7 @@ function solve_steady_state(p::Parameters; Wᵈ_ROW::Real, Wᶠ_ROW::Real,
     Wᵈ = vcat(exp.(sol.u[1:L]), Wᵈ_ROW)
     Wᶠ = vcat(exp.(sol.u[L + 1:2L]), Wᶠ_ROW)
 
-    return Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ, ξ)
+    return Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ, ξ = exp(sol.u[end]))
 
 end
 
@@ -467,5 +487,5 @@ function Solution(p::Parameters, Wᵈ::Vector{<:Real}, Wᶠ::Vector{<:Real};
     Vᶠ, Πᶠ = solve_value_choiceprobs(Wᶠ, p.fᶠ, p.β, p.νᶠ; ξ)
     Lᵈ = stationary_distribution(Πᵈ, total_Lᵈ)
     Lᶠ = stationary_distribution(Πᶠ, total_Lᶠ)
-    return Solution(Vᵈ, Vᶠ, Wᵈ, Wᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ)
+    return Solution(Vᵈ, Vᶠ, Wᵈ, Wᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ, Float64(ξ))
 end

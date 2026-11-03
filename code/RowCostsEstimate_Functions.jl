@@ -27,15 +27,17 @@ const _row_calibration_start_time = Ref(0.0)
 reset_row_calibration_progress!() = (_row_calibration_call_count[] = 0; _row_calibration_start_time[] = time())
 
 """
-The four model-implied calibration moments at a solved steady state `ss`.
+The model-implied calibration moments at a solved steady state `ss`: the four
+targeted in the residual and the foreign-born application share 1 - π̃ᶠ[ROW,ROW].
 """
 function row_calibration_moments(ss::Solution, p::Parameters, ξ::Real, total_Lᵈ::Real)
     L = p.N - 1
-    share_D_abroad     = ss.Lᵈ[p.N] / total_Lᵈ
-    return_rate_D      = leave_probability(ss.Vᵈ, p.fᵈ, p.β, p.νᵈ, p.N)
-    share_F_us         = sum(ss.Lᶠ[1:L]) / (sum(ss.Lᵈ[1:L]) + sum(ss.Lᶠ[1:L]))
-    immigration_rate_F = ξ * leave_probability(ss.Vᶠ, p.fᶠ, p.β, p.νᶠ, p.N)
-    return (; share_D_abroad, return_rate_D, share_F_us, immigration_rate_F)
+    share_D_abroad      = ss.Lᵈ[p.N] / total_Lᵈ
+    return_rate_D       = leave_probability(ss.Vᵈ, p.fᵈ, p.β, p.νᵈ, p.N)
+    share_F_us          = sum(ss.Lᶠ[1:L]) / (sum(ss.Lᵈ[1:L]) + sum(ss.Lᶠ[1:L]))
+    application_share_F = leave_probability(ss.Vᶠ, p.fᶠ, p.β, p.νᶠ, p.N)
+    immigration_rate_F  = ξ * application_share_F
+    return (; share_D_abroad, return_rate_D, share_F_us, immigration_rate_F, application_share_F)
 end
 
 function row_calibration_residual(u::Vector{T}, params) where {T <: Real}
@@ -121,17 +123,25 @@ function load_row_flow_counts()
 end
 
 """
-The four ROW-cost calibration targets, all 2015: the stock share of US-born
+The five ROW calibration targets, all 2015: the stock share of US-born
 people living abroad, the share of foreign-born workers in the US labor
-force, the domestic return-migration rate, and the foreign immigration rate.
+force, the domestic return-migration rate, the foreign immigration rate, and
+the foreign-born application share.
 target_F_us is a US-side ratio (Lᶠ_us/(Lᵈ_us+Lᶠ_us)), not a share of world
 population -- comparing US labor-force counts to total world population was
 comparing incompatible units and drove the calibration to a degenerate
 corner. The return/immigration rates are ACS flow counts
 (load_row_flow_counts()) divided by that nativity's ROW population (total
 population minus the US share) -- the empirical counterpart of the model's
-1-Π^n[ROW,ROW].
+1-Π^n[ROW,ROW]. The application share is the number of people who would like
+to move to the US over the foreign-born ROW population, the counterpart of
+the model's 1-π̃ᶠ[ROW,ROW]. Gallup World Poll, 2015-2017 interviews: about
+158 million adults worldwide name the US as their desired destination ("More
+Than 750 Million Worldwide Would Migrate If They Could", Dec 10, 2018,
+https://news.gallup.com/poll/245255/750-million-worldwide-migrate.aspx).
 """
+const gallup_us_desired = 158e6
+
 function row_cost_targets()
 
     tp    = load_total_population()
@@ -148,8 +158,9 @@ function row_cost_targets()
     target_F_us           = Lᶠ_us / (Lᵈ_us + Lᶠ_us)
     target_D_return       = flows.return_migration_count / Lᵈ_row
     target_F_immigration  = flows.immigration_count / Lᶠ_row
+    target_F_application  = gallup_us_desired / Lᶠ_row
 
-    return (; target_D_abroad, target_F_us, target_D_return, target_F_immigration)
+    return (; target_D_abroad, target_F_us, target_D_return, target_F_immigration, target_F_application)
 
 end
 
