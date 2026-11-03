@@ -7,9 +7,10 @@ include("RowCostsEstimate_Functions.jl")
 
 """
 A perfect-foresight transition path from a steady state (t=0) to a horizon T,
-following an unanticipated change in the foreign-born migration cost path.
-Wᵈ, Wᶠ, Lᵈ, Lᶠ, Vᵈ, Vᶠ
-are N×(T+1) matrices, column k holding period t=k-1; Πᵈ, Πᶠ are N×N×(T+1).
+following an unanticipated change in the foreign-born migration cost path or
+the quota. Wᵈ, Wᶠ, Lᵈ, Lᶠ, Vᵈ, Vᶠ are N×(T+1) matrices, column k holding
+period t=k-1; Πᵈ, Πᶠ are N×N×(T+1) realized choice probabilities; ξ is the
+length T+1 path of admission probabilities.
 """
 struct TransitionPath{T <: Real}
     Wᵈ::Matrix{T}
@@ -20,6 +21,7 @@ struct TransitionPath{T <: Real}
     Lᶠ::Matrix{T}
     Πᵈ::Array{T, 3}
     Πᶠ::Array{T, 3}
+    ξ::Vector{T}
 end
 
 # %% Solver Functions =========================================================
@@ -65,16 +67,20 @@ wages at L_T and the costs at t=T constant forever, so no terminal steady
 state is needed as an input. This also covers the closed border counterfactual, 
 where the foreign wage in a US state rises without bound as Lᶠ → 0.
 
-`ξ_path` (length T+1) is the path of admission probabilities for foreign-born
-entry from Rest of World, held at its t=T value in the terminal values. The
-closed border is ξ_path = 0 with finite costs.
+`ι_path` (length T+1) is the path of the quota on foreign-born entry from
+Rest of World, in the steady state's population units, held at its t=T value
+in the terminal values. Each period's admission probability clears it,
+ξₜ = min{1, ιₜ/applicantsₜ}, where applicantsₜ = (1 - π̃ᶠₜ[ROW,ROW])·Lᶠₜ[ROW]
+are the period-t applications for entry at t+1. The closed border is
+ι_path = 0, so ξ = 0, with finite costs.
 
-Solves via damped fixed-point iteration on the wage path (guess a price path,
-solve the household problem backwards from the terminal values, derive the
-implied aggregate/wage path forward, update the guess, repeat).
+Solves via damped fixed-point iteration on the wage and admission-probability
+paths (guess them, solve the household problem backwards from the terminal
+values, derive the implied labor, wage and ξ paths forward, update the
+guess, repeat).
 """
 function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 3};
-                           ξ_path::Vector{<:Real} = ones(size(fᶠ_path, 3)),
+                           ι_path::Vector{<:Real} = fill(Inf, size(fᶠ_path, 3)),
                            damping::Real = 0.5, tol::Real = 1e-8, maxiter::Integer = 2000,
                            verbose::Bool = true)
 
@@ -94,6 +100,7 @@ function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 
     Lᶠ = zeros(N, T + 1)
     Lᵈ[:, 1] .= ss.Lᵈ
     Lᶠ[:, 1] .= ss.Lᶠ
+    ξ  = fill(ss.ξ, T + 1)
 
     resid = Inf
     iter  = 0
@@ -105,11 +112,11 @@ function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 
         # then sweep t=T-1,...,0.
         Vᵈ[:, T + 1], Πᵈ[:, :, T + 1] = solve_value_choiceprobs(Wᵈ[:, T + 1], p.fᵈ, p.β, p.νᵈ)
         Vᶠ[:, T + 1], Πᶠ[:, :, T + 1] = solve_value_choiceprobs(Wᶠ[:, T + 1], fᶠ_path[:, :, T + 1], p.β, p.νᶠ;
-                                                                 ξ = ξ_path[T + 1])
+                                                                 ξ = ξ[T + 1])
         for k in T:-1:1
             Vᵈ[:, k], Πᵈ[:, :, k] = backward_step(Wᵈ[:, k], p.fᵈ, Vᵈ[:, k + 1], p.β, p.νᵈ)
             Vᶠ[:, k], Πᶠ[:, :, k] = backward_step(Wᶠ[:, k], fᶠ_path[:, :, k], Vᶠ[:, k + 1], p.β, p.νᶠ;
-                                                  ξ = ξ_path[k])
+                                                  ξ = ξ[k])
         end
 
         # Forward pass: L₀=Lˢˢ known, sweep t=1,...,T using the Πₜ's just computed.
@@ -126,19 +133,31 @@ function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 
             Wᵈ_new[l, k], Wᶠ_new[l, k] = market_clearing_wage(Lᵈ[l, k], Lᶠ[l, k], p)
         end
 
+        # Quota clearing in every period, including t=0, whose choices already
+        # face the new quota. Period t's applications use the values at t+1
+        # (the terminal values for t=T).
+        ξ_new = similar(ξ)
+        for k in 1:T + 1
+            V_next = k == T + 1 ? Vᶠ[:, T + 1] : Vᶠ[:, k + 1]
+            A = leave_probability(V_next, fᶠ_path[:, :, k], p.β, p.νᶠ, N) * Lᶠ[N, k]
+            ξ_new[k] = min(1.0, ι_path[k] / A)
+        end
+
         resid = max(maximum(abs, log.(Wᵈ_new[:, 2:T + 1]) .- log.(Wᵈ[:, 2:T + 1])),
-                    maximum(abs, log.(Wᶠ_new[:, 2:T + 1]) .- log.(Wᶠ[:, 2:T + 1])))
+                    maximum(abs, log.(Wᶠ_new[:, 2:T + 1]) .- log.(Wᶠ[:, 2:T + 1])),
+                    maximum(abs, ξ_new .- ξ))
 
         Wᵈ[:, 2:T + 1] .= damping .* Wᵈ_new[:, 2:T + 1] .+ (1 - damping) .* Wᵈ[:, 2:T + 1]
         Wᶠ[:, 2:T + 1] .= damping .* Wᶠ_new[:, 2:T + 1] .+ (1 - damping) .* Wᶠ[:, 2:T + 1]
+        ξ .= damping .* ξ_new .+ (1 - damping) .* ξ
 
-        verbose && iter % 25 == 0 && (println("shooting iter $iter: max log-wage resid = $resid"); flush(stdout))
+        verbose && iter % 25 == 0 && (println("shooting iter $iter: max wage/ξ resid = $resid"); flush(stdout))
 
     end
 
     resid > tol && error("Shooting algorithm failed to converge in $maxiter iterations (resid=$resid)")
     verbose && println("Shooting converged in $iter iterations, resid=$resid")
 
-    return TransitionPath(Wᵈ, Wᶠ, Vᵈ, Vᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ)
+    return TransitionPath(Wᵈ, Wᶠ, Vᵈ, Vᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ, ξ)
 
 end

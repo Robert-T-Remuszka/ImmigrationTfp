@@ -6,64 +6,55 @@ include("TransitionSolve_Functions.jl")
 
 #=================================================================
 Autarky counterfactual, both steady state to steady state and along the
-transition. The baseline is the calibrated non-stochastic steady state. The
-counterfactual makes entering the US infinitely costly for the foreign-born:
-row N of fᶠ (Rest of World as origin) is Inf for every US destination and 0 on
-the diagonal. The foreign-born already in the US still draw taste shocks and
-leave, and none can enter, so the US has no foreign-born labor in the new
-steady state.
+transition. The baseline is the calibrated non-stochastic steady state with
+the quota ι on foreign-born entry. The counterfactual sets the quota to zero,
+so the admission probability ξ is zero: the foreign-born already in the US
+still draw taste shocks and leave, and none can enter, so the US has no
+foreign-born labor in the new steady state.
 =================================================================#
 
 # %% Baseline: calibrated parameters and steady state
 fixed = load_fixed_parameters()
-(; fᵈ_ROW, Bᵈ_ROW, fᶠ_ROW, Bᶠ_ROW) = load_row_costs()
-p = Parameters(fixed, fᵈ_ROW, fᵈ_ROW, fᶠ_ROW, fᶠ_ROW)
+cal = load_row_costs_quota("baseline")
+p = Parameters(fixed, cal.fᵈ_ROW, cal.fᵈ_ROW, cal.fᶠ_ROW, cal.fᶠ_ROW)
+wᵈ_ROW, wᶠ_ROW = cal.wᵈ_ROW, cal.wᶠ_ROW
 
-# Home bias enters through the effective Rest of World wage, Wⁿ_ROW^Bⁿ_ROW
+# Measured Rest of World wages, for the wage comparisons only
 (; Wᵈ_ROW, Wᶠ_ROW) = load_row_income()
-Wᵈ_ROW_eff = Wᵈ_ROW^Bᵈ_ROW
-Wᶠ_ROW_eff = Wᶠ_ROW^Bᶠ_ROW
 
 tp = load_total_population()
 total_Lᵈ = 1.0
 total_Lᶠ = tp.total_Lᶠ / tp.total_Lᵈ
 
 t0 = time()
-ss = solve_steady_state(p; Wᵈ_ROW = Wᵈ_ROW_eff, Wᶠ_ROW = Wᶠ_ROW_eff, total_Lᵈ, total_Lᶠ,
-    W0ᵈ = load_wages().Wᵈ, W0ᶠ = load_wages().Wᶠ)
-println("Baseline steady state solved in ", round(time() - t0, digits = 1), "s")
+ss = solve_steady_state(p; Wᵈ_ROW = wᵈ_ROW, Wᶠ_ROW = wᶠ_ROW, total_Lᵈ, total_Lᶠ,
+    W0ᵈ = load_wages().Wᵈ, W0ᶠ = load_wages().Wᶠ, ι = cal.ι, ξ0 = cal.ξ)
+println("Baseline steady state solved in ", round(time() - t0, digits = 1), "s, ξ = ", ss.ξ)
 
 L = p.N - 1
 println("Baseline foreign-born share of US labor = ", sum(ss.Lᶠ[1:L]) / (sum(ss.Lᶠ[1:L]) + sum(ss.Lᵈ[1:L])))
-
-# %% Autarky: entering the US is infinitely costly for the foreign-born
-fᶠ_autarky = copy(p.fᶠ)
-fᶠ_autarky[p.N, 1:L] .= Inf
-fᶠ_autarky[p.N, p.N]  = 0.0
-
-p_autarky = Parameters(p.β, p.r, p.θ, p.δ, p.ρ, p.μ_z, p.ξ_z, p.ξ_ω, p.νᵈ, p.νᶠ, p.A, p.fᵈ, fᶠ_autarky, p.N)
 
 # %% Autarky steady state
 # With no foreign-born labor the domestic-born perform every task, so λ = 0,
 # Z = E[z(τ)^b]^(1/b) = exp(μ_z + b·ξ_z²/2) and L = Lᵈ. With constant returns
 # and capital rented at a fixed rate, the domestic wage is then the same
 # constant in every US state, whatever its labor supply. The foreign-born are
-# all in Rest of World, which is absorbing for them.
+# all in Rest of World, which is absorbing for them since ξ = 0.
 b = p.ρ / (1 - p.ρ)
 κ = (p.θ / (p.r + p.δ))^(p.θ / (1 - p.θ))
 Wᵈ_us_autarky = (1 - p.θ) * p.A * κ * exp(p.μ_z + 0.5 * b * p.ξ_z^2)
 
-Wᵈ_autarky = vcat(fill(Wᵈ_us_autarky, L), Wᵈ_ROW_eff)
-Vᵈ_autarky, Πᵈ_autarky = solve_value_choiceprobs(Wᵈ_autarky, p_autarky.fᵈ, p.β, p.νᵈ)
+Wᵈ_autarky = vcat(fill(Wᵈ_us_autarky, L), wᵈ_ROW)
+Vᵈ_autarky, Πᵈ_autarky = solve_value_choiceprobs(Wᵈ_autarky, p.fᵈ, p.β, p.νᵈ)
 Lᵈ_autarky = stationary_distribution(Πᵈ_autarky, total_Lᵈ)
 
 Lᶠ_autarky = vcat(zeros(L), total_Lᶠ)
-Vᶠ_ROW_autarky = log(Wᶠ_ROW_eff) / (1 - p.β)
+Vᶠ_ROW_autarky = log(wᶠ_ROW) / (1 - p.β)
 
 # %% Gains from migration: baseline relative to autarky
 # Consumption equivalent g solves ln(1+g)/(1-β) = V_baseline - V_autarky: the
-# permanent proportional change in consumption, valued at a home-bias weight
-# of one, that is worth the same as moving from autarky to the baseline.
+# permanent proportional change in consumption that is worth the same as
+# moving from autarky to the baseline.
 consumption_equivalent(V_baseline, V_autarky) = exp((1 - p.β) * (V_baseline - V_autarky)) - 1
 
 wage_gainᵈ = ss.Wᵈ[1:L] ./ Wᵈ_us_autarky .- 1
@@ -73,7 +64,7 @@ ceᶠ_ROW = consumption_equivalent(ss.Vᶠ[p.N], Vᶠ_ROW_autarky)
 # Foreign-born living in US state l in the baseline are in Rest of World under
 # autarky, so their comparison is the baseline value in l against the autarky
 # value in Rest of World. The wage comparison uses the measured Rest of World
-# wage; the values use the home-bias-adjusted one.
+# wage; the values use the calibrated one.
 wage_gainᶠ = ss.Wᶠ[1:L] ./ Wᶠ_ROW .- 1
 ceᶠ = consumption_equivalent.(ss.Vᶠ[1:L], Vᶠ_ROW_autarky)
 
@@ -95,16 +86,16 @@ println("Foreign-born in the US, wage relative to Rest of World: mean ", round(1
         "%  min ", round(100minimum(wage_gainᶠ), digits = 1), "%  max ", round(100maximum(wage_gainᶠ), digits = 1), "%")
 println("Foreign-born in the US, consumption equivalent: mean ", round(100ceᶠ_mean, digits = 2),
         "%  min ", round(100minimum(ceᶠ), digits = 2), "%  max ", round(100maximum(ceᶠ), digits = 2), "%")
-println("Rest of World foreign wage: measured ", round(Wᶠ_ROW, digits = 1), "  home-bias adjusted ", round(Wᶠ_ROW_eff, digits = 1),
+println("Rest of World foreign wage: measured ", round(Wᶠ_ROW, digits = 1), "  calibrated ", round(wᶠ_ROW, digits = 1),
         "   baseline US foreign wage: mean ", round(sum(weightsᶠ .* ss.Wᶠ[1:L]), digits = 1))
 println("Domestic-born share abroad: baseline ", round(100ss.Lᵈ[p.N] / total_Lᵈ, digits = 3),
         "%  autarky ", round(100Lᵈ_autarky[p.N] / total_Lᵈ, digits = 3), "%")
 
-# %% Transition: the border closes unexpectedly at t=0
+# %% Transition: the quota is set to zero unexpectedly at t=0
 # Labor at t=0 is predetermined at the baseline steady state and the
 # foreign-born already in the US leave only through their own choices.
 T_transition = 300
-path = solve_transition(p, ss, repeat(fᶠ_autarky, 1, 1, T_transition + 1))
+path = solve_transition(p, ss, repeat(p.fᶠ, 1, 1, T_transition + 1); ι_path = zeros(T_transition + 1))
 
 # Consumption equivalent ς along the transition: ln(1+ς)/(1-β) = V̂₀ - V, the
 # permanent proportional change in baseline consumption worth the same as
@@ -117,12 +108,21 @@ log_mean(μ, ς) = exp(sum(μ .* log.(1 .+ ς))) - 1
 ςᵈ_mean = log_mean(weightsᵈ, ςᵈ[1:L])
 ςᶠ_mean = log_mean(weightsᶠ, ςᶠ[1:L])
 
-# Wage and option-value annuities in the value decomposition, by location
+# Wage and option-value annuities in the value decomposition, by location.
+# The option value is -ν ln π_ll, the log stay probability, except for the
+# foreign-born in Rest of World under the lottery: their value is
+# ln w + βV' - ξ·ν·ln π̃, with π̃ the probability of not applying (rejected
+# applicants also stay, so the realized stay probability is not the one that
+# enters).
 discounts = p.β .^ (0:T_transition - 1)
 wage_term(Ŵ, W) = [(1 - p.β) * sum(discounts .* log.(Ŵ[l, 1:T_transition] ./ W[l])) for l in 1:p.N]
 option_term(Π̂, Π, ν) = [-(1 - p.β) * ν * sum(discounts .* log.(Π̂[l, l, 1:T_transition] ./ Π[l, l])) for l in 1:p.N]
 wage_termᵈ, option_termᵈ = wage_term(path.Wᵈ, ss.Wᵈ), option_term(path.Πᵈ, ss.Πᵈ, p.νᵈ)
 wage_termᶠ, option_termᶠ = wage_term(path.Wᶠ, ss.Wᶠ), option_term(path.Πᶠ, ss.Πᶠ, p.νᶠ)
+
+ξ_log_π̃(ξ, V_next) = ξ == 0 ? 0.0 : ξ * log1p(-leave_probability(V_next, p.fᶠ, p.β, p.νᶠ, p.N))
+lottery_flow = [ξ_log_π̃(path.ξ[k], path.Vᶠ[:, k + 1]) - ξ_log_π̃(ss.ξ, ss.Vᶠ) for k in 1:T_transition]
+option_termᶠ[p.N] = -(1 - p.β) * p.νᶠ * sum(discounts .* lottery_flow)
 
 # The value difference equals the two annuities plus the terminal value term
 terminal_termᵈ = (1 - p.β) * p.β^T_transition .* (path.Vᵈ[:, end] .- ss.Vᵈ)
