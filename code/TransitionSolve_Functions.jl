@@ -30,9 +30,11 @@ V_next, this period's wages W and cost matrix f, compute this period's value
 and choice probabilities directly. Unlike solve_value_choiceprobs, this is
 not a fixed-point search -- V_next is already known (from later in the
 transition, or the terminal steady state), so each location's value and
-choice row is a single softmax/logsumexp evaluation.
+choice row is a single softmax/logsumexp evaluation. `ξ` is this period's
+admission probability for entry from Rest of World (location N).
 """
-function backward_step(W::Vector{T}, f::Matrix{T}, V_next::Vector{T}, β::T, ν::T) where {T <: Real}
+function backward_step(W::Vector{T}, f::Matrix{T}, V_next::Vector{T}, β::T, ν::T;
+                       ξ::Real = 1.0) where {T <: Real}
 
     N = length(W)
     lnW = log.(W)
@@ -41,8 +43,7 @@ function backward_step(W::Vector{T}, f::Matrix{T}, V_next::Vector{T}, β::T, ν:
 
     for l in 1:N
         x = (β .* V_next .- f[l, :]) ./ ν
-        Π[l, :] .= softmax(x)
-        V[l] = lnW[l] + ν * logsumexp(x)
+        V[l], Π[l, :] = value_row(lnW[l], x, V_next[l], β, ν, ξ, l == N)
     end
 
     return V, Π
@@ -64,11 +65,16 @@ wages at L_T and the costs at t=T constant forever, so no terminal steady
 state is needed as an input. This also covers the closed border counterfactual, 
 where the foreign wage in a US state rises without bound as Lᶠ → 0.
 
+`ξ_path` (length T+1) is the path of admission probabilities for foreign-born
+entry from Rest of World, held at its t=T value in the terminal values. The
+closed border is ξ_path = 0 with finite costs.
+
 Solves via damped fixed-point iteration on the wage path (guess a price path,
 solve the household problem backwards from the terminal values, derive the
 implied aggregate/wage path forward, update the guess, repeat).
 """
 function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 3};
+                           ξ_path::Vector{<:Real} = ones(size(fᶠ_path, 3)),
                            damping::Real = 0.5, tol::Real = 1e-8, maxiter::Integer = 2000,
                            verbose::Bool = true)
 
@@ -98,10 +104,12 @@ function solve_transition(p::Parameters, ss::Solution, fᶠ_path::Array{<:Real, 
         # Backward pass: terminal values hold t=T wages and costs constant,
         # then sweep t=T-1,...,0.
         Vᵈ[:, T + 1], Πᵈ[:, :, T + 1] = solve_value_choiceprobs(Wᵈ[:, T + 1], p.fᵈ, p.β, p.νᵈ)
-        Vᶠ[:, T + 1], Πᶠ[:, :, T + 1] = solve_value_choiceprobs(Wᶠ[:, T + 1], fᶠ_path[:, :, T + 1], p.β, p.νᶠ)
+        Vᶠ[:, T + 1], Πᶠ[:, :, T + 1] = solve_value_choiceprobs(Wᶠ[:, T + 1], fᶠ_path[:, :, T + 1], p.β, p.νᶠ;
+                                                                 ξ = ξ_path[T + 1])
         for k in T:-1:1
             Vᵈ[:, k], Πᵈ[:, :, k] = backward_step(Wᵈ[:, k], p.fᵈ, Vᵈ[:, k + 1], p.β, p.νᵈ)
-            Vᶠ[:, k], Πᶠ[:, :, k] = backward_step(Wᶠ[:, k], fᶠ_path[:, :, k], Vᶠ[:, k + 1], p.β, p.νᶠ)
+            Vᶠ[:, k], Πᶠ[:, :, k] = backward_step(Wᶠ[:, k], fᶠ_path[:, :, k], Vᶠ[:, k + 1], p.β, p.νᶠ;
+                                                  ξ = ξ_path[k])
         end
 
         # Forward pass: L₀=Lˢˢ known, sweep t=1,...,T using the Πₜ's just computed.

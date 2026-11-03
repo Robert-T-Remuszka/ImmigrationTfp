@@ -48,13 +48,37 @@ end
 softmax(x) = (e = exp.(x .- maximum(x)); e ./ sum(e))
 
 """
-EMAX operator fixed point for one nativity, found via Newton's method on
-g(V) = T(V) - V. The EMAX operator's Jacobian is β·Π (Π the choice
-probabilities at the current V), so each step solves the N×N linear system
-(I - βΠ)ΔV = g(V) -- quadratic convergence, no need for the many sweeps plain
-fixed-point iteration would take.
+Value and realized choice probabilities of one location, given next period's
+value V_next. Location N (Rest of World) faces the entry lottery when `ξ < 1`:
+a worker there who targets a US state is admitted with probability ξ and
+otherwise stays, so its value is ln w + ξ·ν·logsumexp(x) + (1-ξ)·β·V_next[N]
+and its realized row is ξ times the application probabilities, plus 1-ξ on
+the diagonal. Every other location, and location N with ξ = 1, is the
+standard EMAX row.
 """
-function solve_value_choiceprobs(W::Vector{T}, f::Matrix{T}, β::T, ν::T;
+function value_row(lnw::T, x::Vector{T}, V_next_l::T, β::T, ν::T, ξ::Real, lottery::Bool) where {T <: Real}
+
+    π̃ = softmax(x)
+    lse = ν * logsumexp(x)
+    lottery || return lnw + lse, π̃
+
+    N = length(x)
+    π = ξ .* π̃
+    π[N] += 1 - ξ
+    return lnw + ξ * lse + (1 - ξ) * β * V_next_l, π
+
+end
+
+"""
+EMAX operator fixed point for one nativity, found via Newton's method on
+g(V) = T(V) - V. The EMAX operator's Jacobian is β·Π (Π the realized choice
+probabilities at the current V, including the lottery row), so each step
+solves the N×N linear system (I - βΠ)ΔV = g(V) -- quadratic convergence, no
+need for the many sweeps plain fixed-point iteration would take. `ξ` is the
+admission probability for entry from Rest of World (location N); ξ = 1 means
+no quota.
+"""
+function solve_value_choiceprobs(W::Vector{T}, f::Matrix{T}, β::T, ν::T; ξ::Real = 1.0,
                                   tol::Real = 1e-10, maxiter::Integer = 100) where {T <: Real}
 
     N = length(W)
@@ -66,8 +90,7 @@ function solve_value_choiceprobs(W::Vector{T}, f::Matrix{T}, β::T, ν::T;
     for _ in 1:maxiter
         for l in 1:N
             x = (β .* V .- f[l, :]) ./ ν
-            Π[l, :] .= softmax(x)
-            Tv[l] = lnW[l] + ν * logsumexp(x)
+            Tv[l], Π[l, :] = value_row(lnW[l], x, V[l], β, ν, ξ, l == N)
         end
         g = Tv .- V
         maximum(abs.(g)) < tol && break
@@ -77,6 +100,14 @@ function solve_value_choiceprobs(W::Vector{T}, f::Matrix{T}, β::T, ν::T;
     return V, Π
 
 end
+
+"""
+Application probabilities of a worker in Rest of World (location N): the
+choice probabilities over all destinations before the entry lottery, the
+same as the realized ones when ξ = 1.
+"""
+application_probabilities(V::Vector{T}, f::Matrix{T}, β::T, ν::T) where {T <: Real} =
+    softmax((β .* V .- f[end, :]) ./ ν)
 
 """
 Probability that a resident of location l leaves it, i.e. 1-Π[l,l], computed
@@ -196,13 +227,13 @@ steady state.
 """
 function steady_state_residual(logW::Vector{T}, params) where {T <: Real}
 
-    (; p, Wᵈ_ROW, Wᶠ_ROW, total_Lᵈ, total_Lᶠ) = params
+    (; p, Wᵈ_ROW, Wᶠ_ROW, total_Lᵈ, total_Lᶠ, ξ) = params
     L = p.N - 1
 
     Wᵈ = vcat(exp.(logW[1:L]), Wᵈ_ROW)
     Wᶠ = vcat(exp.(logW[L + 1:2L]), Wᶠ_ROW)
 
-    s = Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ)
+    s = Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ, ξ)
 
     res = similar(logW)
     for l in 1:L
@@ -222,13 +253,15 @@ market clearing. Uses a finite-difference Jacobian rather than
 differentiating through the nested EMAX/relative-wage Newton solves inside
 the residual -- more robust, and cheap enough at this problem size (102
 wage unknowns) that there's no real efficiency case for the riskier route.
+Wᵈ_ROW, Wᶠ_ROW are the calibrated Rest of World wages; `ξ` is the admission
+probability for foreign-born entry from Rest of World (ξ = 1: no quota).
 """
 function solve_steady_state(p::Parameters; Wᵈ_ROW::Real, Wᶠ_ROW::Real,
                              total_Lᵈ::Real, total_Lᶠ::Real,
-                             W0ᵈ::Vector{<:Real}, W0ᶠ::Vector{<:Real},
+                             W0ᵈ::Vector{<:Real}, W0ᶠ::Vector{<:Real}, ξ::Real = 1.0,
                              abstol::Real = 1e-8, maxiters::Integer = 1000)
 
-    params = (; p, Wᵈ_ROW = Float64(Wᵈ_ROW), Wᶠ_ROW = Float64(Wᶠ_ROW), total_Lᵈ, total_Lᶠ)
+    params = (; p, Wᵈ_ROW = Float64(Wᵈ_ROW), Wᶠ_ROW = Float64(Wᶠ_ROW), total_Lᵈ, total_Lᶠ, ξ)
     logW0 = log.(Float64.(vcat(W0ᵈ, W0ᶠ)))
 
     prob = NonlinearProblem(steady_state_residual, logW0, params)
@@ -240,7 +273,7 @@ function solve_steady_state(p::Parameters; Wᵈ_ROW::Real, Wᶠ_ROW::Real,
     Wᵈ = vcat(exp.(sol.u[1:L]), Wᵈ_ROW)
     Wᶠ = vcat(exp.(sol.u[L + 1:2L]), Wᶠ_ROW)
 
-    return Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ)
+    return Solution(p, Wᵈ, Wᶠ; total_Lᵈ, total_Lᶠ, ξ)
 
 end
 
@@ -418,13 +451,15 @@ end
 """
 Solve Vᵈ, Vᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ given wages Wᵈ, Wᶠ (each length N) and the total
 domestic/foreign population (US + Rest of World) used to scale the
-stationary labor-supply distribution.
+stationary labor-supply distribution. The entry lottery with admission
+probability `ξ` applies to the foreign-born only; ξ = 0 makes Rest of World
+absorbing, which has no stationary distribution with foreign-born in the US.
 """
 function Solution(p::Parameters, Wᵈ::Vector{<:Real}, Wᶠ::Vector{<:Real};
-                   total_Lᵈ::Real, total_Lᶠ::Real)
+                   total_Lᵈ::Real, total_Lᶠ::Real, ξ::Real = 1.0)
     Wᵈ, Wᶠ = Float64.(Wᵈ), Float64.(Wᶠ)
     Vᵈ, Πᵈ = solve_value_choiceprobs(Wᵈ, p.fᵈ, p.β, p.νᵈ)
-    Vᶠ, Πᶠ = solve_value_choiceprobs(Wᶠ, p.fᶠ, p.β, p.νᶠ)
+    Vᶠ, Πᶠ = solve_value_choiceprobs(Wᶠ, p.fᶠ, p.β, p.νᶠ; ξ)
     Lᵈ = stationary_distribution(Πᵈ, total_Lᵈ)
     Lᶠ = stationary_distribution(Πᶠ, total_Lᶠ)
     return Solution(Vᵈ, Vᶠ, Wᵈ, Wᶠ, Lᵈ, Lᶠ, Πᵈ, Πᶠ)
