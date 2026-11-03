@@ -6,7 +6,7 @@ include("AggSupply_Functions.jl")
 # %% Structs =================================================================
 
 """
-Model parameters. fᵈ, fᶠ are N×N bilateral migration cost matrices, N = 51 US
+Model parameters. fᵈ, fᶠ are N×N bilateral migration cost matrices, N = 50 US
 states + Rest of World (the last row/column). A is the output scale
 parameter (paper's Technology section) anchoring the model to real 2015
 dollars.
@@ -218,7 +218,7 @@ function market_clearing_wage(Lᵈ::Real, Lᶠ::Real, p::Parameters)
 end
 
 """
-Residual of the full steady-state wage system: given log-wages for the 51 US
+Residual of the full steady-state wage system: given log-wages for the 50 US
 states (both nativities; Rest of World's wages are fixed exogenously), solve
 the migration block for the labor allocation those wages generate, then
 return the gap between the guessed wages and the wages market clearing
@@ -280,12 +280,16 @@ end
 # %% Helper Functions =========================================================
 
 """
-Load the 51×51 fᵈ, fᶠ bilateral cost matrices from EstimateBilateralCosts.do's
-saved BilateralCosts2015.dta, ordered by sorted state FIPS code.
+Load the 50×50 fᵈ, fᶠ bilateral cost matrices from EstimateBilateralCosts.do's
+saved BilateralCosts2015.dta, ordered by sorted state FIPS code, without the
+states in `excluded_statefips`. Each f_ll' is inverted from the l,l' pair's
+own flows and stay probabilities, so dropping a state leaves the others'
+costs unchanged.
 """
 function load_bilateral_costs()
 
     df = DataFrame(load(joinpath(data, "BilateralCosts2015.dta")))
+    df = df[.!in(excluded_statefips).(df.Origin) .& .!in(excluded_statefips).(df.Destination), :]
     states = sort(unique(df.Origin))
     idx = Dict(s => i for (i, s) in enumerate(states))
     L = length(states)
@@ -331,7 +335,7 @@ end
 
 """
 Build Parameters from pre-loaded `fixed` (see load_fixed_parameters) plus the
-four ROW-linkage costs, touching no disk. The 51×51 interior keeps its
+four ROW-linkage costs, touching no disk. The 50×50 interior keeps its
 estimated f^n_{ll'}=f^n_{l'l} symmetry (Assumption A3), but row N (ROW as
 origin, i.e. entering the US) and column N (ROW as destination, i.e. leaving
 the US) are separate free parameters per nativity, not required to match --
@@ -372,12 +376,13 @@ end
 """
 Load 2015 US state labor supplies by nativity from StateAnalysisPreTfp.dta,
 sorted by state FIPS code to match load_bilateral_costs()'s state ordering.
-Covers the 51 US states only -- Rest of World's supply isn't in this file.
+Covers the 50 US states only (`excluded_statefips` dropped) -- Rest of
+World's supply isn't in this file.
 """
 function load_labor_supply()
 
     df = DataFrame(load(joinpath(data, "StateAnalysisPreTfp.dta")))
-    df = df[df.year .== 2015, :]
+    df = df[(df.year .== 2015) .& .!in(excluded_statefips).(df.statefip), :]
     sort!(df, :statefip)
 
     return (Lᵈ = Float64.(df.Supply_Domestic), Lᶠ = Float64.(df.Supply_Foreign))
@@ -389,12 +394,12 @@ Load 2015 US state wages by nativity from StateWageSupplyPanel.dta, sorted by
 state FIPS code to match load_bilateral_costs()'s state ordering. These are
 the composition-adjusted hourly wages (real 2009 USD), scaled to annual
 earnings at `annual_hours` so they are in the same units as the Rest of
-World wage constants.
+World wage constants. `excluded_statefips` are dropped.
 """
 function load_wages(; annual_hours::Real = 2080)
 
     df = DataFrame(load(joinpath(data, "StateWageSupplyPanel.dta")))
-    df = df[df.Year .== 2015, :]
+    df = df[(df.Year .== 2015) .& .!in(excluded_statefips).(df.STATEFIP), :]
     sort!(df, :STATEFIP)
 
     return (Wᵈ = annual_hours .* Float64.(df.Wage_Domestic_Resid), Wᶠ = annual_hours .* Float64.(df.Wage_Foreign_Resid))
@@ -433,7 +438,7 @@ labor-supply distribution: total_Lᵈ is everyone born in the US, wherever
 they live; total_Lᶠ is everyone else in the world.
 
 total_Lᵈ = 2015 US domestic-born labor supply (load_labor_supply(), summed
-across the 51 states) + US-born people living abroad (MakePopulationConstants.do's
+across the 50 states) + US-born people living abroad (MakePopulationConstants.do's
 us_abroad_2015). total_Lᶠ = world population (that file's world_pop_2015)
 minus total_Lᵈ.
 """

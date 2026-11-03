@@ -23,3 +23,5 @@ state_abbrevs = Dict(
     "Vermont" => "VT", "Virginia" => "VA", "Washington" => "WA", "West Virginia" => "WV",
     "Wisconsin" => "WI", "Wyoming" => "WY", "District of Columbia" => "DC"
 )
+# State FIPS codes left out of the model's set of US locations (DC)
+excluded_statefips = ["11"]

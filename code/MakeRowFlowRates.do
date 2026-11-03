@@ -10,7 +10,8 @@ year as every other piece of this calibration).
 
 Same sample restrictions as AcsPiPanel.dta's construction (age 16+, full-time
 workers, BPL<900), but keeping exactly the rows that panel drops: MIGPLAC1
->= 100 is the ROW-origin counterpart to its interstate-only panel.
+>= 100 is the ROW-origin counterpart to its interstate-only panel. Residents
+of DC are dropped, since the model's US locations are the 50 states.
 
 Input: data/acs/Acs2016.dta.
 Output: data/RowFlowCounts.dta, one row (immigration_count_2015,
@@ -22,6 +23,7 @@ use "${Data}/acs/Acs2016.dta", clear
 drop if AGE < 16
 drop if UHRSWORK < 35
 drop if BPL >= 900
+drop if STATEFIP == 11
 gen Domestic = BPL < 100
 
 * ROW-origin only: MIGPLAC1 >= 100 means living abroad (or in a US
