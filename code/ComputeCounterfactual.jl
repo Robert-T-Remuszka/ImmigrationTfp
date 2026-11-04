@@ -251,3 +251,39 @@ ylims!(ax_bar, 0, nothing)
 outfile_bar = joinpath(graphs, "AutarkyGainsBar.pdf")
 save(outfile_bar, fig_bar)
 println("Saved figure to $outfile_bar")
+
+# %% Bar chart: transition consumption equivalent by location, split into wage
+# and option-value terms, for domestic-born and foreign-born workers: the 50
+# states sorted by the total, then Rest of World (ROW) last. For the
+# foreign-born in Rest of World, the potential immigrants, the option value is
+# the lottery term computed above. Units are 100 × log points, i.e. percent of
+# consumption. The sign is that of the gain from migration, the baseline
+# relative to closing the border (minus ς), matching the impulse-response
+# consumption equivalents in MakeIrfConsEq.jl, which are gains from an inflow.
+function decomposition_panel!(ax, wage, option, total)
+    order = vcat(sortperm(total[1:L]), p.N)
+    x = 1:p.N
+    barplot!(ax, repeat(x, 2), vcat(100 .* wage[order], 100 .* option[order]),
+        dodge = repeat([1, 2], inner = p.N), color = repeat([colorant"#457b9d", colorant"#a8dadc"], inner = p.N))
+    scatter!(ax, x, 100 .* total[order], color = colorant"#1d3557", markersize = 7)
+    hlines!(ax, [0.0], color = :black, linewidth = 1)
+    ax.xticks = (x, [l == p.N ? "ROW" : abbrev[states[l]] for l in order])
+    hidespines!(ax, :t, :r)
+    xlims!(ax, 0.3, p.N + 0.7)
+end
+
+fig_dec = Figure(size = (1200, 750))
+ax_d = Axis(fig_dec[1, 1], ylabel = "Domestic-born (%)", xticklabelrotation = π / 2, xticklabelsize = 10,
+    xgridvisible = false, ygridvisible = false)
+ax_f = Axis(fig_dec[2, 1], ylabel = "Foreign-born (%)", xticklabelrotation = π / 2, xticklabelsize = 10,
+    xgridvisible = false, ygridvisible = false)
+decomposition_panel!(ax_d, -wage_termᵈ, -option_termᵈ, -log.(1 .+ ςᵈ))
+decomposition_panel!(ax_f, -wage_termᶠ, -option_termᶠ, -log.(1 .+ ςᶠ))
+Legend(fig_dec[1:2, 2],
+    [PolyElement(color = colorant"#457b9d"), PolyElement(color = colorant"#a8dadc"),
+     MarkerElement(marker = :circle, color = colorant"#1d3557", markersize = 9)],
+    ["Wage", "Option value", "Total"], framevisible = false)
+
+outfile_dec = joinpath(graphs, "AutarkyTransitionDecomp.pdf")
+save(outfile_dec, fig_dec)
+println("Saved figure to $outfile_dec")

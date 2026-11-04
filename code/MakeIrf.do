@@ -298,6 +298,10 @@ frame LpIvPctChg_Results {
         loc ++i
     }
 
+    * Every impulse response, for the consumption equivalents in
+    * MakeIrfConsEq.jl
+    export delimited variable h beta se first_stage_F using "${Data}/LpivIrfPctChg_1990.csv", replace
+
     graph combine `plots', rows(3) cols(3) xsize(10) ysize(8) name(BaselinePctChg_1990)
     graph export "${Graphs}/LpivBaselinePctChg_1990.pdf", name(BaselinePctChg_1990) replace
 
