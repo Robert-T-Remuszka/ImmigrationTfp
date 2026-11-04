@@ -349,6 +349,44 @@ bys STATEFIP (Year): gen double fg_TotalEmp = Inflow_Foreign / TotalEmp[_n-1]
 la var TotalEmp "State l's total (domestic + foreign) FTFY labor supply"
 la var fg_TotalEmp "Migration shock (employment-denominated): Inflow_Foreign_t / TotalEmp_{t-1}; missing for Year=2001 (no lag)"
 
+/******************* STAY PROBABILITIES *******************************************/
+* Stay probability of state l's nativity-n workers, row-normalized:
+*
+*     Stay^n_{l,t} = F^n_{ll,t} / D^n_{l,t},   D^n_{l,t} = sum over US states k of F^n_{lk,t}
+*
+* F^n_{lk,t} is the number of nativity-n workers in the year-(t+1) ACS who
+* report living in l a year earlier and live in k now (AcsPiPanel.dta). D^n_{l,t}
+* is everyone in that same survey who lived in l at t, wherever they live now,
+* so numerator and denominator come from one ACS sample and Stay is in [0, 1].
+*
+* This differs from the choice probabilities in EstimateBilateralCosts.do,
+* which divide F^n_{lk,t} by the origin stock S^n_{l,t} from the year-t ACS, a
+* separate sample. That denominator cancels in every ratio the cost and
+* scale-parameter estimates use (each ratio shares an origin), but not in the
+* stay probability on its own: there the year-t sampling error in S^n_{l,t}
+* pushes the ratio above one in many small-state years. D^n_{l,t} cancels in
+* the same ratios, so both definitions give the same cost and scale estimates.
+* Moves abroad between t and t+1 are not in the ACS, so Stay is the probability
+* of staying in l given still living in the US.
+*
+* Dated by the origin period, Year = t, the period in which the choice is made.
+preserve
+    use "${Data}/AcsPiPanel.dta", clear
+    bys Origin t: egen double Out_Domestic = total(Flow_Domestic)
+    bys Origin t: egen double Out_Foreign  = total(Flow_Foreign)
+    keep if Origin == Destination
+    gen double Stay_Domestic = Flow_Domestic / Out_Domestic
+    gen double Stay_Foreign  = Flow_Foreign  / Out_Foreign
+    keep Origin t Stay_Domestic Stay_Foreign
+    ren (Origin t) (STATEFIP Year)
+    tempfile Stay
+    save `Stay'
+restore
+merge 1:1 STATEFIP Year using `Stay', keep(master match) nogen
+
+la var Stay_Domestic "Stay probability, domestic-born: flow l -> l / all flows out of l to US states, both realized in Year+1 (one ACS sample)"
+la var Stay_Foreign  "Stay probability, foreign-born: flow l -> l / all flows out of l to US states, both realized in Year+1 (one ACS sample)"
+
 sort STATEFIP Year
 save "${Data}/StateAnalysisPanel.dta", replace
 di as text "Wrote ${Data}/StateAnalysisPanel.dta"
