@@ -287,3 +287,65 @@ Legend(fig_dec[1:2, 2],
 outfile_dec = joinpath(graphs, "AutarkyTransitionDecomp.pdf")
 save(outfile_dec, fig_dec)
 println("Saved figure to $outfile_dec")
+
+# %% Headline numbers of the transition as LaTeX macros, for \input in the paper.
+# Gains from migration in percent: the baseline relative to closing the border.
+# The total is the consumption equivalent itself, 1/(1+ς) - 1, aggregated in
+# levels; the wage and option-value terms are 100 × log points, as in the
+# decomposition chart. Means over US states weight by baseline steady-state
+# employment of the same nativity; Rest of World is reported on its own.
+gainᵈ, gainᶠ = 1 ./ (1 .+ ςᵈ) .- 1, 1 ./ (1 .+ ςᶠ) .- 1
+fmt(x) = (v = round(100x, digits = 2); @sprintf("%.2f", v == 0 ? 0.0 : v))
+# Each number is also written as name*Abs, its absolute value, for text that
+# states the direction in words ("lose").
+texmacro(io, name, x) = (println(io, "\\newcommand{\\$(name)}{", fmt(x), "}");
+                         println(io, "\\newcommand{\\$(name)Abs}{", fmt(abs(x)), "}"))
+open(joinpath(tables, "AutarkyCeNumbers.tex"), "w") do io
+    for (tag, gain, wage, option, w) in (("Dom", gainᵈ, -wage_termᵈ, -option_termᵈ, weightsᵈ),
+                                         ("For", gainᶠ, -wage_termᶠ, -option_termᶠ, weightsᶠ))
+        texmacro(io, "autCe$(tag)TotalMean", sum(w .* gain[1:L]))
+        texmacro(io, "autCe$(tag)TotalMin", minimum(gain[1:L]))
+        texmacro(io, "autCe$(tag)TotalMax", maximum(gain[1:L]))
+        texmacro(io, "autCe$(tag)WageMean", sum(w .* wage[1:L]))
+        texmacro(io, "autCe$(tag)OptionMean", sum(w .* option[1:L]))
+        texmacro(io, "autCe$(tag)OptionMin", minimum(option[1:L]))
+        texmacro(io, "autCe$(tag)OptionMax", maximum(option[1:L]))
+        texmacro(io, "autCe$(tag)RowTotal", gain[p.N])
+        texmacro(io, "autCe$(tag)RowWage", wage[p.N])
+        texmacro(io, "autCe$(tag)RowOption", option[p.N])
+    end
+end
+println("Wrote ", joinpath(tables, "AutarkyCeNumbers.tex"))
+
+# %% Table: gains from migration along the transition (percent), the baseline
+# relative to closing the border. The total is the consumption equivalent; the
+# wage and option-value terms are 100 × log points, as in the decomposition
+# chart. Incumbents in US states: means weighted by baseline steady-state
+# employment of the same nativity, with the minimum and maximum of the total
+# across states. Rest of World is a single location for each nativity.
+# Numbers in math mode so negatives get a minus sign, not a hyphen
+mfmt(x) = "\$" * fmt(x) * "\$"
+open(joinpath(tables, "AutarkyTransitionGains.tex"), "w") do io
+    println(io, "{")
+    # Full line width, with the extra space spread between the columns
+    println(io, "\\begin{tabular*}{\\linewidth}{@{\\extracolsep{\\fill}}lccccc}")
+    println(io, "\\toprule")
+    println(io, " & \\multicolumn{3}{c}{Total} & \\multicolumn{2}{c}{Decomposition} \\\\")
+    println(io, "\\cmidrule{2-4} \\cmidrule{5-6}")
+    println(io, " & Mean & Min & Max & Wage & Option value \\\\")
+    println(io, "\\midrule")
+    for (lab, gain, wage, option, w) in (("Domestic-born", gainᵈ, -wage_termᵈ, -option_termᵈ, weightsᵈ),
+                                         ("Foreign-born", gainᶠ, -wage_termᶠ, -option_termᶠ, weightsᶠ))
+        println(io, lab, " & ", mfmt(sum(w .* gain[1:L])), " & ", mfmt(minimum(gain[1:L])), " & ",
+                mfmt(maximum(gain[1:L])), " & ", mfmt(sum(w .* wage[1:L])), " & ", mfmt(sum(w .* option[1:L])), " \\\\")
+    end
+    for (lab, gain, option) in (("Domestic-born, Rest of World", gainᵈ, -option_termᵈ),
+                                ("Foreign-born, Rest of World", gainᶠ, -option_termᶠ))
+        # The Rest of World wage is a calibrated constant, so its wage term is left blank
+        println(io, lab, " & ", mfmt(gain[p.N]), " & & & & ", mfmt(option[p.N]), " \\\\")
+    end
+    println(io, "\\bottomrule")
+    println(io, "\\end{tabular*}")
+    println(io, "}")
+end
+println("Wrote ", joinpath(tables, "AutarkyTransitionGains.tex"))

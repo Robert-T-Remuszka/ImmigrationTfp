@@ -45,6 +45,31 @@ for (lab, c) in (("Domestic-born", ceᵈ), ("Foreign-born", ceᶠ))
             lab, c.wage_part, c.option_part, c.total)
 end
 
+# %% Headline numbers as LaTeX macros, percent per one percent increase in the
+# foreign-born stock, for \input in the paper, rounded to two decimals
+# Each number is also written as name*Abs, its absolute value, for text that
+# states the direction in words ("falls by").
+fmt(x) = (v = round(x, digits = 2); @sprintf("%.2f", v == 0 ? 0.0 : v))
+texmacro(io, name, x) = (println(io, "\\newcommand{\\$(name)}{", fmt(x), "}");
+                         println(io, "\\newcommand{\\$(name)Abs}{", fmt(abs(x)), "}"))
+open(joinpath(tables, "IrfCeNumbers.tex"), "w") do io
+    for (tag, c) in (("Dom", ceᵈ), ("For", ceᶠ))
+        texmacro(io, "irfCe$(tag)Total", c.total)
+        texmacro(io, "irfCe$(tag)Wage", c.wage_part)
+        texmacro(io, "irfCe$(tag)Option", c.option_part)
+    end
+    # Impulse responses at the last horizon (h = H, the tenth year), percent per
+    # one percent increase in the foreign-born stock, with standard errors
+    names = Dict("L" => "LaborAgg", "Supply_Foreign" => "LaborFor", "Supply_Domestic" => "LaborDom",
+                 "Z" => "Productivity", "Stay_Domestic" => "StayDom", "Stay_Foreign" => "StayFor",
+                 "Wage_Domestic_Resid" => "WageDom", "Wage_Foreign_Resid" => "WageFor", "Wage_Relative" => "WageRel")
+    for r in eachrow(irf[irf.h .== H, :])
+        texmacro(io, "irfTenYr$(names[r.variable])", r.beta)
+        println(io, "\\newcommand{\\irfTenYr$(names[r.variable])Se}{", fmt(r.se), "}")
+    end
+end
+println("Wrote ", joinpath(tables, "IrfCeNumbers.tex"))
+
 # %% Bar chart: wage and option-value parts and the total, by nativity
 try
     set_theme!(fontsize = 16,
