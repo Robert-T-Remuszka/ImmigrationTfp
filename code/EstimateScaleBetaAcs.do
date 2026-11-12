@@ -298,22 +298,40 @@ loc s_N_F_iv   = string(`N_F_iv',  "%12.0fc")
 loc s_dwhp_D   = string(`dwhp_D', "%9.3f")
 loc s_dwhp_F   = string(`dwhp_F', "%9.3f")
 
-file open dwhtable using "${Tables}/DWHTest.tex", write replace
-file write dwhtable "{" _n
-file write dwhtable "\begin{tabular}{lcccc}" _n
-file write dwhtable "\toprule" _n
-file write dwhtable "            &\multicolumn{2}{c}{OLS}&\multicolumn{2}{c}{IV}\\\cmidrule(lr){2-3}\cmidrule(lr){4-5}" _n
-file write dwhtable "            &\$\nu^D\$&\$\nu^F\$&\$\nu^D\$&\$\nu^F\$\\" _n
-file write dwhtable "\midrule" _n
-file write dwhtable "\addlinespace" _n
-file write dwhtable "            &`s_nu_D_ols'&`s_nu_F_ols'&`s_nu_D_iv'&`s_nu_F_iv'\\" _n
-file write dwhtable "\midrule" _n
-file write dwhtable "Observations    &`s_N_D_ols'&`s_N_F_ols'&`s_N_D_iv'&`s_N_F_iv'\\" _n
-file write dwhtable "DWH \$p\$-value &            &            &`s_dwhp_D'&`s_dwhp_F'\\" _n
-file write dwhtable "\addlinespace" _n
-file write dwhtable "\bottomrule" _n
-file write dwhtable "\end{tabular}" _n
-file write dwhtable "}" _n
-file close dwhtable
-
-di as text "Wrote ${Tables}/DWHTest.tex"
+/* Two versions of the same table: DWHTest.tex for the paper, and
+   DWHTestSlide.tex for the slides, where the OLS estimates used in the model
+   are highlighted (mycolor5, defined in the deck) and a footnote row states the
+   endogenous regressor and the instruments. */
+foreach version in Paper Slide {
+    if "`version'" == "Paper" {
+        loc outfile "${Tables}/DWHTest.tex"
+        loc c_D_ols "`s_nu_D_ols'"
+        loc c_F_ols "`s_nu_F_ols'"
+    }
+    else {
+        loc outfile "${Tables}/DWHTestSlide.tex"
+        loc c_D_ols "\textcolor{mycolor5}{`s_nu_D_ols'}"
+        loc c_F_ols "\textcolor{mycolor5}{`s_nu_F_ols'}"
+    }
+    file open dwhtable using "`outfile'", write replace
+    file write dwhtable "{" _n
+    file write dwhtable "\begin{tabular}{lcccc}" _n
+    file write dwhtable "\toprule" _n
+    file write dwhtable "            &\multicolumn{2}{c}{OLS}&\multicolumn{2}{c}{IV}\\\cmidrule(lr){2-3}\cmidrule(lr){4-5}" _n
+    file write dwhtable "            &\$\nu^D\$&\$\nu^F\$&\$\nu^D\$&\$\nu^F\$\\" _n
+    file write dwhtable "\midrule" _n
+    file write dwhtable "\addlinespace" _n
+    file write dwhtable "            &`c_D_ols'&`c_F_ols'&`s_nu_D_iv'&`s_nu_F_iv'\\" _n
+    file write dwhtable "\midrule" _n
+    file write dwhtable "Observations    &`s_N_D_ols'&`s_N_F_ols'&`s_N_D_iv'&`s_N_F_iv'\\" _n
+    file write dwhtable "DWH \$p\$-value &            &            &`s_dwhp_D'&`s_dwhp_F'\\" _n
+    file write dwhtable "\addlinespace" _n
+    file write dwhtable "\bottomrule" _n
+    if "`version'" == "Slide" {
+        file write dwhtable "\multicolumn{5}{p{0.85\textwidth}}{\footnotesize IV instruments the destination-to-origin log wage ratio at \$t+1\$ with the same ratio one year earlier and the log flow ratio at \$t-1\$. Origin-destination pair fixed effects.}\\" _n
+    }
+    file write dwhtable "\end{tabular}" _n
+    file write dwhtable "}" _n
+    file close dwhtable
+    di as text "Wrote `outfile'"
+}
