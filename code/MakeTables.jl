@@ -117,6 +117,8 @@ write_parameter_table(joinpath(tables, "ParameterEstimatesSlide.tex");
 # Four decimals: at two it would print as 0.00.
 open(joinpath(tables, "CalibrationNumbers.tex"), "w") do io
     println(io, "\\newcommand{\\xiSS}{", @sprintf("%.4f", rowcosts.ξ), "}")
+    # Elasticity of substitution between tasks implied by the estimated ρ
+    println(io, "\\newcommand{\\sigmaHat}{", @sprintf("%.2f", σ̂), "}")
 end
 println("Wrote ", joinpath(tables, "CalibrationNumbers.tex"))
 
