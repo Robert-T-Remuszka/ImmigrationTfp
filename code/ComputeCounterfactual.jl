@@ -314,6 +314,15 @@ open(joinpath(tables, "AutarkyCeNumbers.tex"), "w") do io
         texmacro(io, "autCe$(tag)RowWage", wage[p.N])
         texmacro(io, "autCe$(tag)RowOption", option[p.N])
     end
+    # The same results stated from the closure's side, for the slides: closing
+    # the border relative to the baseline: ς itself and the terms without the sign flip.
+    for (tag, ς, wage, option, w) in (("Dom", ςᵈ, wage_termᵈ, option_termᵈ, weightsᵈ),
+                                      ("For", ςᶠ, wage_termᶠ, option_termᶠ, weightsᶠ))
+        texmacro(io, "bcCe$(tag)TotalMean", sum(w .* ς[1:L]))
+        texmacro(io, "bcCe$(tag)WageMean", sum(w .* wage[1:L]))
+        texmacro(io, "bcCe$(tag)OptionMean", sum(w .* option[1:L]))
+        texmacro(io, "bcCe$(tag)RowTotal", ς[p.N])
+    end
 end
 println("Wrote ", joinpath(tables, "AutarkyCeNumbers.tex"))
 
@@ -325,27 +334,37 @@ println("Wrote ", joinpath(tables, "AutarkyCeNumbers.tex"))
 # across states. Rest of World is a single location for each nativity.
 # Numbers in math mode so negatives get a minus sign, not a hyphen
 mfmt(x) = "\$" * fmt(x) * "\$"
-open(joinpath(tables, "AutarkyTransitionGains.tex"), "w") do io
-    println(io, "{")
-    # Full line width, with the extra space spread between the columns
-    println(io, "\\begin{tabular*}{\\linewidth}{@{\\extracolsep{\\fill}}lccccc}")
-    println(io, "\\toprule")
-    println(io, " & \\multicolumn{3}{c}{Total} & \\multicolumn{2}{c}{Decomposition} \\\\")
-    println(io, "\\cmidrule{2-4} \\cmidrule{5-6}")
-    println(io, " & Mean & Min & Max & Wage & Option value \\\\")
-    println(io, "\\midrule")
-    for (lab, gain, wage, option, w) in (("Domestic-born", gainᵈ, -wage_termᵈ, -option_termᵈ, weightsᵈ),
-                                         ("Foreign-born", gainᶠ, -wage_termᶠ, -option_termᶠ, weightsᶠ))
-        println(io, lab, " & ", mfmt(sum(w .* gain[1:L])), " & ", mfmt(minimum(gain[1:L])), " & ",
-                mfmt(maximum(gain[1:L])), " & ", mfmt(sum(w .* wage[1:L])), " & ", mfmt(sum(w .* option[1:L])), " \\\\")
+function write_transition_table(path, totalᵈ, totalᶠ, wageᵈ, wageᶠ, optionᵈ, optionᶠ)
+    open(path, "w") do io
+        println(io, "{")
+        # Full line width, with the extra space spread between the columns
+        println(io, "\\begin{tabular*}{\\linewidth}{@{\\extracolsep{\\fill}}lccccc}")
+        println(io, "\\toprule")
+        println(io, " & \\multicolumn{3}{c}{Total} & \\multicolumn{2}{c}{Decomposition} \\\\")
+        println(io, "\\cmidrule{2-4} \\cmidrule{5-6}")
+        println(io, " & Mean & Min & Max & Wage & Option value \\\\")
+        println(io, "\\midrule")
+        for (lab, total, wage, option, w) in (("Domestic-born", totalᵈ, wageᵈ, optionᵈ, weightsᵈ),
+                                              ("Foreign-born", totalᶠ, wageᶠ, optionᶠ, weightsᶠ))
+            println(io, lab, " & ", mfmt(sum(w .* total[1:L])), " & ", mfmt(minimum(total[1:L])), " & ",
+                    mfmt(maximum(total[1:L])), " & ", mfmt(sum(w .* wage[1:L])), " & ", mfmt(sum(w .* option[1:L])), " \\\\")
+        end
+        for (lab, total, option) in (("Domestic-born, Rest of World", totalᵈ, optionᵈ),
+                                     ("Foreign-born, Rest of World", totalᶠ, optionᶠ))
+            # The Rest of World wage is a calibrated constant, so its wage term is left blank
+            println(io, lab, " & ", mfmt(total[p.N]), " & & & & ", mfmt(option[p.N]), " \\\\")
+        end
+        println(io, "\\bottomrule")
+        println(io, "\\end{tabular*}")
+        println(io, "}")
     end
-    for (lab, gain, option) in (("Domestic-born, Rest of World", gainᵈ, -option_termᵈ),
-                                ("Foreign-born, Rest of World", gainᶠ, -option_termᶠ))
-        # The Rest of World wage is a calibrated constant, so its wage term is left blank
-        println(io, lab, " & ", mfmt(gain[p.N]), " & & & & ", mfmt(option[p.N]), " \\\\")
-    end
-    println(io, "\\bottomrule")
-    println(io, "\\end{tabular*}")
-    println(io, "}")
+    println("Wrote ", path)
 end
-println("Wrote ", joinpath(tables, "AutarkyTransitionGains.tex"))
+
+# Paper: gains from migration, the baseline relative to closing the border
+write_transition_table(joinpath(tables, "AutarkyTransitionGains.tex"),
+                       gainᵈ, gainᶠ, -wage_termᵈ, -wage_termᶠ, -option_termᵈ, -option_termᶠ)
+# Slides: the same results from the closure's side, closing the border
+# relative to the baseline, so they read like the 1% immigration shock
+write_transition_table(joinpath(tables, "BorderClosureGainsSlide.tex"),
+                       ςᵈ, ςᶠ, wage_termᵈ, wage_termᶠ, option_termᵈ, option_termᶠ)
