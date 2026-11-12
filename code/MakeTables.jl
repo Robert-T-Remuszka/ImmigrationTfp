@@ -7,6 +7,7 @@
 #     probit (eq:agg-foreign-cp)
 #   - ρ, fit by AggSupply_Estimate.jl's factor-share NLS (eq:foreign-labor-share)
 #   - (νᴰ, νᶠ), fit by EstimateScaleBetaAcs.do (eq:scale-estimating)
+#   - β, the annual discount factor, calibrated following Caliendo et al. (2019)
 # The old Pareto/DFS parameterization's (θ, γ, μ) are gone -- γ, μ have no
 # meaning outside that specification, and θ is no longer a single pooled
 # scalar (it's state-varying, from CalibrateTheta.do's capital-FOC calibration,
@@ -34,6 +35,7 @@ cp        = load_cp_estimate()
 aggsupply = load_aggsupply_estimate()
 scale     = load_scale_estimate()
 rowcosts  = load_row_costs_quota("baseline")
+fixed     = load_fixed_parameters()
 
 fmt(x) = @sprintf("%.3f", x)
 pct(x) = @sprintf("%.3f\\%%", 100x)
@@ -57,6 +59,8 @@ panelA = [
     ("\\sigma",        fmt(σ̂),              "",                       "\$\\sigma = 1/(1-\\rho)\$"),
     ("\\nu^D",         fmt(scale.νᵈ),       "eq:scale-estimating",    "Migration flows on wages and future flows"),
     ("\\nu^F",         fmt(scale.νᶠ),       "eq:scale-estimating",    "Migration flows on wages and future flows"),
+    # β is calibrated, not estimated: the annual equivalent of CDP's quarterly 0.99
+    ("\\beta",         @sprintf("%.2f", fixed.β), "",                    "Calibrated, \\citet{caliendo2019trade}"),
 ]
 
 # (symbol, value, target title, model, data) -- shares/rates in percent so a
